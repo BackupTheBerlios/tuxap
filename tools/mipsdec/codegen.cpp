@@ -16,7 +16,7 @@ std::string getIndentStr(unsigned uDepth)
 
 std::string getRegVarName(tRegister eRegister)
 {
-	std::string strVarName = "REG_";
+	std::string strVarName = (eRegister == R_ZERO) ? "" : "REG_";
 	strVarName += getRegName(eRegister);
 	return strVarName;
 }
@@ -61,7 +61,11 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 			case IT_ADDU:
 			{
 				doIndent(pDestFile, uDepth);
-				if(aInstruction.eRD == aInstruction.eRS)
+				if((aInstruction.eRS == 0) && (aInstruction.eRT == 0))
+				{
+					fprintf(pDestFile, "%s = 0;\n", getRegVarName(aInstruction.eRD).c_str());
+				}
+				else if(aInstruction.eRD == aInstruction.eRS)
 				{
 					fprintf(pDestFile, "%s += %s;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRT).c_str());
 				}
@@ -121,15 +125,15 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				doIndent(pDestFile, uDepth);
 				M_ASSERT(aInstruction.eRD == R_RA);
 
-				unsigned uValue;
+				unsigned uValue = 0;
 				unsigned uSymIdx;
 				if((resolveRegisterValue(collInstList, uInstructionIdx, aInstruction.eRS, uValue)) && (Symbols::lookup(uValue, uSymIdx)))
 				{
-					fprintf(pDestFile, "call FUNCTION %s;\n\n", Symbols::get(uSymIdx)->strName.c_str());									
+					fprintf(pDestFile, "%s();\n\n", Symbols::get(uSymIdx)->strName.c_str());									
 				}
 				else
 				{
-					fprintf(pDestFile, "call UNKNOWN FUNCTION in %s;\n\n", getRegVarName(aInstruction.eRS).c_str());
+					fprintf(pDestFile, "call UNKNOWN FUNCTION in %s (0x%08X);\n\n", getRegVarName(aInstruction.eRS).c_str(), uValue);
 				}
 				break;
 			}
@@ -144,6 +148,18 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				doIndent(pDestFile, uDepth);
 				char cSign = aInstruction.iSI < 0 ? '-' : '+';
 				fprintf(pDestFile, "%s = *((unsigned int *)(((unsigned int)(%s)) %c %d));\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI));
+				break;
+			}
+			case IT_MFC0:
+			{
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "%s = read_c0_status();\n", getRegVarName(aInstruction.eRT).c_str());
+				break;
+			}
+			case IT_MTC0:
+			{
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "write_c0_status(%s);\n", getRegVarName(aInstruction.eRT).c_str());
 				break;
 			}
 			case IT_NOP:
@@ -162,7 +178,11 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				break;
 			case IT_ORI:
 				doIndent(pDestFile, uDepth);
-				if(aInstruction.eRT == aInstruction.eRS)
+				if(aInstruction.eRS == 0)
+				{
+					fprintf(pDestFile, "%s = 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), aInstruction.uUI);
+				}
+				else if(aInstruction.eRT == aInstruction.eRS)
 				{
 					fprintf(pDestFile, "%s |= 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), aInstruction.uUI);
 				}

@@ -202,9 +202,11 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 			switch(uCop0Opcode)
 			{
 				case 0x00:
+					decodeRTRDSEL(uInstructionData);
 					eType = IT_MFC0;
 					break;
 				case 0x04:
+					decodeRTRDSEL(uInstructionData);
 					eType = IT_MTC0;
 					break;
 				default:
@@ -246,6 +248,36 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 	return true;
 }
 
+bool Instruction::modifiesRegister(tRegister eRegister) const
+{
+	switch(eType)
+	{
+		case IT_ADDIU:
+			return eRT == eRegister;
+		case IT_ADDU:
+			return eRD == eRegister;
+		case IT_NOP:
+			return false;
+		default:
+			M_ASSERT(false);
+			return true;
+	}
+}
+
+void Instruction::encodeRegisterMove(tRegister eSrcRegister, tRegister eDstRegister)
+{
+	M_ASSERT(eSrcRegister != REG_NONE);
+	M_ASSERT(eDstRegister != REG_NONE);
+
+	setDefaults();
+	uAddress = 0xFFFFFFFF;
+	eType = IT_ADDU;
+	eFormat = IF_RSRTRD;
+	eRS = eSrcRegister;
+	eRT = R_ZERO;
+	eRD = eDstRegister;
+}
+
 void Instruction::setDefaults(void)
 {
 	eFormat = IF_UNKNOWN;
@@ -273,7 +305,7 @@ void Instruction::decodeRTRDSEL(unsigned uInstructionData)
 	setDefaults();
 	eFormat = IF_RTRDSEL;
 	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
-	eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
+	//eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
 	uSEL = uInstructionData & 0x7;
 }
 
@@ -455,11 +487,37 @@ bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tReg
 					uRegisterVal = collInstList[uPos].uUI << 16;
 					bGotAbsoluteVal = true;
 				}
-				break;		
+				break;
+			case IT_ADDU:
+				if(collInstList[uPos].eRD == eRegister)
+				{
+					unsigned uVal1 = 0;
+
+					if((collInstList[uPos].eRS != R_ZERO) && (!resolveRegisterValue(collInstList, uPos, collInstList[uPos].eRS, uVal1)))
+					{
+						return false;
+					}
+
+					unsigned uVal2 = 0;
+
+					if((collInstList[uPos].eRT != R_ZERO) && (!resolveRegisterValue(collInstList, uPos, collInstList[uPos].eRT, uVal2)))
+					{
+						return false;
+					}
+
+					uRegisterVal = uVal1 + uVal2;
+
+					return true;
+				}
 		}
 
 		if(!bGotAbsoluteVal)
 		{
+			if(collInstList[uPos].bIsJumpTarget)
+			{
+				return false;
+			}
+
 			uPos--;
 		}
 	}
@@ -486,13 +544,13 @@ bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tReg
 					uRegisterVal += collInstList[uPos].iSI;
 				}
 				break;
-			case IT_ADDU:
-				M_ASSERT(collInstList[uPos].eRD != eRegister);
-				break;
 			default:
 			{
-				return false;
-				M_ASSERT(false);
+				if(collInstList[uPos].modifiesRegister(eRegister))
+				{
+					M_ASSERT(false);
+					return false;
+				}
 				break;
 			}
 		}

@@ -2,7 +2,7 @@
 #define COMMON_H
 
 #ifdef _WIN32
-//#include <windows.h>
+#include <windows.h>
 #include <assert.h>
 #define M_ASSERT(x) assert(x)
 #pragma warning(disable : 4996)

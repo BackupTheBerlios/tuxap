@@ -19,10 +19,35 @@ bool resolveDelaySlots(tInstList &collInstList)
 				case IT_JR:
 				case IT_JR_HB:
 				{
-					itCurr->bDelaySlotReordered = true;
-
 					M_ASSERT((itCurr + 1) < itEnd);
+
+					itCurr->bDelaySlotReordered = true;
 					itCurr->swap(*(itCurr + 1), false);
+
+					/* If the instruction in the delay slot modifies the */
+					/* jump address we need to keep a backup to handle   */
+					/* the jump in the correct way...                    */
+					switch((itCurr + 1)->eType)
+					{
+						case IT_J:
+							/* Jump address not in register */
+							break;
+						case IT_JALR:
+						case IT_JALR_HB:
+						case IT_JR:
+						case IT_JR_HB:
+							/* Jump address in register in RS */
+							if(itCurr->modifiesRegister((itCurr + 1)->eRS))
+							{
+								Instruction aInstruction;
+								aInstruction.encodeRegisterMove((itCurr + 1)->eRS, getDSBRegister((itCurr + 1)->eRS));
+								(itCurr + 1)->eRS = getDSBRegister((itCurr + 1)->eRS);
+								collInstList.insert(itCurr, aInstruction);
+							}
+							break;
+						default:
+							M_ASSERT(false);
+					}
 
 					itCurr = collInstList.begin();
 					itEnd = collInstList.end();
@@ -34,9 +59,9 @@ bool resolveDelaySlots(tInstList &collInstList)
 				case IT_BLTZ:
 				case IT_BNE:
 				{
-					itCurr->bDelaySlotReordered = true;
-
 					M_ASSERT((itCurr + 1) < itEnd);
+
+					itCurr->bDelaySlotReordered = true;
 
 					/* Close if branch using the original jump address */
 					Instruction aInstruction;

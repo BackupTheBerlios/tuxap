@@ -42,7 +42,7 @@ int main(int argc, char **argv)
 #ifdef _WIN32
 	while(1)
 	{
-//		Sleep(100);
+		Sleep(1);
 	}
 #endif
 

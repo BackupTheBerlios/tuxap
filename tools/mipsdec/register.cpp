@@ -57,6 +57,8 @@ const char *getRegName(tRegister eRegister)
 			return "a3";
 		case R_AT:
 			return "at";
+		case R_AT_DSB:
+			return "at_DSB";
 		case R_GP:
 			return "gp";
 		case R_RA:
@@ -81,5 +83,17 @@ const char *getRegName(tRegister eRegister)
 		default:
 			M_ASSERT(false);
 			return "<DEF>";
+	}
+}
+
+tRegister getDSBRegister(tRegister aRegister)
+{
+	switch(aRegister)
+	{
+		case R_AT:
+			return R_AT_DSB;
+		default:
+			M_ASSERT(false);
+			return R_UNKNOWN;
 	}
 }

@@ -62,6 +62,8 @@ public:
 	void encodeAbsoluteJump(unsigned uAddress);
 	void swap(Instruction &aOtherInstruction, bool bSwapAddress);
 	bool parse(unsigned uInstructionData, unsigned uInstructionAddress);
+	bool modifiesRegister(tRegister eRegister) const;
+	void encodeRegisterMove(tRegister eSrcRegister, tRegister eDstRegister);
 
 	unsigned uAddress;
 	tInstructionType eType;
