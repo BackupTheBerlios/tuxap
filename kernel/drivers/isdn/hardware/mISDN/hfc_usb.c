@@ -73,13 +73,13 @@ struct hfcusb_data;
 struct usb_fifo;
 struct led_info;
 
+static void hfc_usb_handle_led(struct hfcusb_data *hfc, int event);
 static void hfc_usb_stop_isoc_chain(struct usb_fifo *fifo);
 static int hfc_usb_lock_dev(void *data, int nowait);
 static void hfc_usb_unlock_dev(void *data);
 static int hfc_usb_init_dchannel(struct hfcusb_data *ta);
 static int hfc_usb_init_bchannels(struct hfcusb_data *ta);
 static int hfc_usb_register_channels(struct hfcusb_data *ta);
-static int hfc_usb_hw_init(struct hfcusb_data *ta);
 #include "hfc_usb_old.c"
 /* end old stuff */
 
@@ -87,15 +87,106 @@ static int hfc_usb_hw_init(struct hfcusb_data *ta);
 /* Hardware related functions                                                 */
 /******************************************************************************/
 
+/***************************************************/
+/* write led data to auxport & invert if necessary */
+/***************************************************/
+static void 
+hfc_usb_write_led(hfcusb_data *hfc, u8 led_state)
+{
+	if (led_state != hfc->led_state) {
+		hfc->led_state = led_state;
+		queue_control_request(hfc, HFCUSB_P_DATA, (hfc->led->invert) ? ~led_state : led_state, 1);
+	}
+}
+
+/******************************************/
+/* invert B-channel LEDs if data is sent  */
+/******************************************/
+static void
+hfc_usb_led_timer(hfcusb_data * hfc)
+{
+   	static int cnt = 0;
+	u8 led_state = hfc->led_state;
+
+	if (cnt) {
+		if (hfc->led_b_active & 1)
+			led_state |= hfc->led->bits[2];
+		if (hfc->led_b_active & 2)
+			led_state |= hfc->led->bits[3];
+	} else {
+		if ((!(hfc->led_b_active & 1) || hfc->led_new_data & 1))
+			led_state &= ~hfc->led->bits[2];
+		if ((!(hfc->led_b_active & 2) || hfc->led_new_data & 2))
+			led_state &= ~hfc->led->bits[3];
+	}
+
+	hfc_usb_write_led(hfc, led_state);
+	hfc->led_new_data = 0;
+
+	cnt = !cnt;
+
+	// restart 4 hz timer
+	hfc->led_timer.expires = jiffies + (LED_TIME * HZ) / 1000;
+	if (!timer_pending(&hfc->led_timer))
+		add_timer(&hfc->led_timer);
+}
+
+/**************************/
+/* handle LED requests    */
+/**************************/
+static void
+hfc_usb_handle_led(hfcusb_data *hfc, int event)
+{
+	u8 led_state = hfc->led_state;
+
+	// if no scheme -> no LED action
+   	if (hfc->led->scheme == LED_OFF)
+		return;
+
+	switch(event) {
+		case LED_POWER_ON:
+			led_state |= hfc->led->bits[0];
+			break;
+		case LED_POWER_OFF: // no Power off handling
+			break;
+		case LED_S0_ON:
+			led_state |= hfc->led->bits[1];
+			break;
+		case LED_S0_OFF:
+			led_state &= ~hfc->led->bits[1];
+			break;
+		case LED_B1_ON:
+			hfc->led_b_active |= 1;
+			break;
+		case LED_B1_OFF:
+			hfc->led_b_active &= ~1;
+			break;
+		case LED_B1_DATA:
+			hfc->led_new_data |= 1;
+			break;
+		case LED_B2_ON:
+			hfc->led_b_active |= 2;
+			break;
+		case LED_B2_OFF:
+			hfc->led_b_active &= ~2;
+			break;
+		case LED_B2_DATA:
+			hfc->led_new_data |= 2;
+			break;
+	}
+
+	hfc_usb_write_led(hfc, led_state);
+}
+
 /* stops running iso chain and frees their pending urbs */
 static void 
 hfc_usb_stop_isoc_chain(usb_fifo *fifo)
 {
 	int i;
 
-	for(i = 0; i < 2; i++)
+	for (i = 0; i < 2; i++)
 	{
-		if(fifo->iso[i].purb)
+		if (fifo->iso[i].purb)
 		{
 			usb_unlink_urb(fifo->iso[i].purb);
 			usb_free_urb(fifo->iso[i].purb);
@@ -172,8 +263,7 @@ hfc_usb_start_int_fifo(usb_fifo * fifo)
 	fifo->active = 1;		/* must be marked active */
 	err = usb_submit_urb(fifo->urb, GFP_KERNEL);
 
-	if(err)
-	{
+	if(err)	{
 		printk(HFC_USB_ERR "Unable to submit URB (error = %d)\n",  err);
 		fifo->active = 0;
 		fifo->skbuff = NULL;
@@ -185,18 +275,15 @@ hfc_usb_start_int_fifo(usb_fifo * fifo)
 static int 
 hfc_usb_start_rx_fifo(usb_fifo *fifo, int num_packets_per_urb)
 {
-	switch(fifo->hfc->cfg_used) {
-		case CNF_3INT3ISO:
-		case CNF_4INT3ISO:
+	switch(fifo->transfer_mode) {
+		case USB_ENDPOINT_XFER_INT:
 			return hfc_usb_start_int_fifo(fifo);
-			break;
-		case CNF_3ISO3ISO:
-		case CNF_4ISO3ISO:
+		case USB_ENDPOINT_XFER_ISOC:
 #warning TODO: Look at fifo and computate num_pakets_per_urb
 			return hfc_usb_start_isoc_chain(fifo, num_packets_per_urb, rx_iso_complete, 16);
-			break;
 		default:
 			printk(HFC_USB_ERR "Invalid FIFO configuration!\n");
+			BUG();
 			return -EINVAL;
 	}
 }
@@ -531,7 +618,7 @@ hfc_usb_misdn_unregister(void)
 }
 
 static int 
-hfc_usb_hw_init(hfcusb_data *hfc)
+hfc_usb_hw_init(hfcusb_data *hfc, u32 packet_size, u32 iso_packet_size)
 {
 	usb_fifo *fifo;
 	int i, err;
@@ -562,10 +649,10 @@ hfc_usb_hw_init(hfcusb_data *hfc)
 	write_usb(hfc, HFCUSB_CIRM, 0x10);	// aux = output, reset off
 
 	// set USB_SIZE to match the the wMaxPacketSize for INT or BULK transfers
-	write_usb(hfc, HFCUSB_USB_SIZE, (hfc->packet_size / 8) | ((hfc->packet_size / 8) << 4));
+	write_usb(hfc, HFCUSB_USB_SIZE, (packet_size / 8) | ((packet_size / 8) << 4));
 
 	// set USB_SIZE_I to match the the wMaxPacketSize for ISO transfers
-	write_usb(hfc, HFCUSB_USB_SIZE_I, hfc->iso_packet_size);
+	write_usb(hfc, HFCUSB_USB_SIZE_I, iso_packet_size);
 
 	/* enable PCM/GCI master mode */
 	write_usb(hfc, HFCUSB_MST_MODE1, 0);	/* set default values */
@@ -611,8 +698,8 @@ hfc_usb_hw_init(hfcusb_data *hfc)
 	hfc->t4_timer.function = (void *) l1_timer_expire_t4;
 	/* init the led timer */
 	init_timer(&hfc->led_timer);
-	hfc->led_timer.data = (long) hfc;
-	hfc->led_timer.function = (void *) led_timer;
+	hfc->led_timer.data = (long)hfc;
+	hfc->led_timer.function = (void *)hfc_usb_led_timer;
 	// trigger 4 hz led timer
 	hfc->led_timer.expires = jiffies + (LED_TIME * HZ) / 1000;
 	if(!timer_pending(&hfc->led_timer)) add_timer(&hfc->led_timer);
@@ -646,7 +733,7 @@ hfc_usb_hw_init(hfcusb_data *hfc)
 	hfc_usb_register_channels(hfc);
 	hfc_usb_start_fifos(hfc);
 
-	handle_led(hfc,LED_POWER_ON);
+	hfc_usb_handle_led(hfc,LED_POWER_ON);
 
 	return 0;
 }
@@ -663,9 +750,9 @@ static struct led_info hfc_led_info[] = {
 };
 
 static struct usb_device_id hfc_usb_id_table[] = {
-	{HFC_USB_DEVICE(0x07b0, 0x0007, 0)},	/* Billion USB TA 2 */
-	{HFC_USB_DEVICE(0x0742, 0x2008, 1)},	/* Stollmann USB TA */
-	{HFC_USB_DEVICE(0x0959, 0x2bd0, 2)},	/* Colognechip USB eval TA */
+	{HFC_USB_DEVICE(0x07b0, 0x0007, 1)},	/* Billion USB TA 2 */
+	{HFC_USB_DEVICE(0x0742, 0x2008, 2)},	/* Stollmann USB TA */
+	{HFC_USB_DEVICE(0x0959, 0x2bd0, 0)},	/* Colognechip USB eval TA */
 	{HFC_USB_DEVICE(0x08e3, 0x0301, 3)},	/* OliTec ISDN USB */
 	{HFC_USB_DEVICE(0x0675, 0x1688, 2)},	/* DrayTec ISDN USB */
 	{HFC_USB_DEVICE(0x07fa, 0x0846, 1)},	/* Bewan ISDN USB TA */
@@ -674,141 +761,101 @@ static struct usb_device_id hfc_usb_id_table[] = {
 
 // this array represents all endpoints possible in the HCF-USB
 // the last 2 entries are the configuration number and the minimum interval for Interrupt endpoints
-static int hfc_usb_ep_cfg[][18]=
+static int hfc_usb_ep_cfg[][17]=
 {
 	// INT in, ISO out config
-	{EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NOP,EP_INT,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_NUL,EP_NUL,CNF_4INT3ISO,2},
-	{EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NUL,EP_NUL,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_NUL,EP_NUL,CNF_3INT3ISO,2},
+	{EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NOP,EP_INT,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_NUL,EP_NUL,2},
+	{EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NUL,EP_NUL,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_NUL,EP_NUL,2},
 	// ISO in, ISO out config
-	{EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_NOP,EP_ISO,CNF_4ISO3ISO,2},
-	{EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_NUL,EP_NUL,CNF_3ISO3ISO,2},
+	{EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_NOP,EP_ISO,2},
+	{EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_NUL,EP_NUL,2},
 };
 
 #define NUM_EP_CFG (sizeof(ep_cfg) / sizeof(ep_cfg[0]))
 
-static int
-hfc_usb_init_dev(alt_idx, cfg_idx)
+static inline int 
+get_ep_cfg_idx(struct usb_host_endpoint *ep)
 {
+	int ep_cfg_idx = ((ep->desc.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK) - 1) * 2;
+
+	if (ep->desc.bEndpointAddress & USB_DIR_IN)
+		ep_cfg_idx++;
+
+	return ep_cfg_idx;
+}
+
+static int
+hfc_usb_init_dev(hfcusb_data *hfc, struct usb_interface *intf, int alt_idx, int cfg_idx)
+{
+	struct usb_host_endpoint *ep;
+	int ep_cfg_idx;
 	int ep_idx;
-	hfcusb_data *hfc;
-
-	if (!(hfc = kmalloc(sizeof(*hfc), GFP_KERNEL)))
-		return -ENOMEM;
-
-	memset(hfc, 0, sizeof(*hfc));
-
+	usb_fifo *fifo;
+	struct usb_host_interface *host_if = &intf->altsetting[alt_idx];
+	u32 iso_packet_size = 0;
+	u32 packet_size = 0;
 
 	for (ep_idx = 0; ep_idx < host_if->desc.bNumEndpoints; ep_idx++) {
 		ep = &host_if->endpoint[ep_idx];
+		ep_cfg_idx = get_ep_cfg_idx(ep);
+		fifo = &hfc->fifos[ep_cfg_idx & 7];
+
+		// only initialize used endpoints
+		if ((hfc_usb_ep_cfg[cfg_idx][ep_cfg_idx] == EP_NOP) || (hfc_usb_ep_cfg[cfg_idx][ep_cfg_idx] == EP_NUL))
+			continue;
+
+		switch(ep->desc.bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) {
+			case USB_ENDPOINT_XFER_INT:
+				fifo->pipe = usb_rcvintpipe(hfc->dev, ep->desc.bEndpointAddress);
+				packet_size = ep->desc.wMaxPacketSize;
+				break;
+			case USB_ENDPOINT_XFER_BULK:
+				if (ep->desc.bEndpointAddress & USB_DIR_IN)
+					fifo->pipe = usb_rcvbulkpipe(hfc->dev, ep->desc.bEndpointAddress);
+				else
+					fifo->pipe = usb_sndbulkpipe(hfc->dev, ep->desc.bEndpointAddress);
+				packet_size = ep->desc.wMaxPacketSize;
+				break;
+			case USB_ENDPOINT_XFER_ISOC:
+				if (ep->desc.bEndpointAddress & USB_DIR_IN)
+					fifo->pipe = usb_rcvisocpipe(hfc->dev, ep->desc.bEndpointAddress);
+				else
+					fifo->pipe = usb_sndisocpipe(hfc->dev, ep->desc.bEndpointAddress);
+				iso_packet_size = ep->desc.wMaxPacketSize;
+				break;
+			default:
+				fifo->pipe = 0;
+				continue;
 		
+		}
+
+		fifo->fifonum = ep_cfg_idx & 7;
+		fifo->hfc = hfc;
+		fifo->usb_packet_maxlen = ep->desc.wMaxPacketSize;
+		fifo->intervall = ep->desc.bInterval;
+		fifo->skbuff = NULL;
+		fifo->transfer_mode = ep->desc.bmAttributes & USB_ENDPOINT_XFERTYPE_MASK;
 	}
 
+	/* create the control pipes needed for register access */
+	hfc->ctrl_in_pipe = usb_rcvctrlpipe(hfc->dev, 0);
+	hfc->ctrl_out_pipe = usb_sndctrlpipe(hfc->dev, 0);
+	hfc->ctrl_urb = usb_alloc_urb(0, GFP_KERNEL);
 
+	printk(HFC_USB_INFO "Detected \"%s\" configuration: %s (if=%d alt=%d)\n", "", "", hfc->if_used, hfc->alt_used);
 
-#if 0
-			iface = iface_used;
+	/* init the chip and register the driver */
+	if (hfc_usb_hw_init(hfc, packet_size, iso_packet_size)) {
+		if (hfc->ctrl_urb) {
+			usb_unlink_urb(hfc->ctrl_urb);
+			usb_free_urb(hfc->ctrl_urb);
+			hfc->ctrl_urb = NULL;
+		}
+		kfree(hfc);
+		return -EIO;
+	}
 
-			ep = iface->endpoint;	/* first endpoint descriptor */
-			vcf = validconf[small_match];
-
-			for (i = 0; i < iface->desc.bNumEndpoints; i++) {
-				ep_addr = ep->desc.bEndpointAddress;
-				idx = ((ep_addr & 0x7f)-1)*2;	/* get endpoint base */
-				if (ep_addr & 0x80)
-					idx++;
-				cidx = idx & 7;
-				attr = ep->desc.bmAttributes;
-
-				// only initialize used endpoints
-				if (vcf[idx] != EP_NOP && vcf[idx] != EP_NUL) {
-					switch (attr) {
-						case USB_ENDPOINT_XFER_INT:
-							context->fifos[cidx].pipe = usb_rcvintpipe(dev, ep->desc.bEndpointAddress);
-							context->fifos[cidx].usb_transfer_mode = USB_INT;
-							packet_size = ep->desc.wMaxPacketSize; // remember max packet size
-#ifdef VERBOSE_USB_DEBUG
-							printk (KERN_INFO "HFC-USB: Interrupt-In Endpoint found %d ms(idx:%d cidx:%d)!\n",
-								ep->desc.bInterval, idx, cidx);
-#endif
-							break;
-						case USB_ENDPOINT_XFER_BULK:
-							if (ep_addr & 0x80)
-								context->fifos[cidx].pipe = usb_rcvbulkpipe(dev, ep->desc.bEndpointAddress);
-							else
-								context->fifos[cidx].pipe = usb_sndbulkpipe(dev, ep->desc.bEndpointAddress);
-							context->fifos[cidx].usb_transfer_mode = USB_BULK;
-							packet_size = ep->desc.wMaxPacketSize; // remember max packet size
-#ifdef VERBOSE_USB_DEBUG
-							printk (KERN_INFO "HFC-USB: Bulk Endpoint found (idx:%d cidx:%d)!\n",
-								idx, cidx);
-#endif
-							break;
-						case USB_ENDPOINT_XFER_ISOC:
-							if (ep_addr & 0x80)
-								context->fifos[cidx].pipe = usb_rcvisocpipe(dev, ep->desc.bEndpointAddress);
-							else
-								context->fifos[cidx].pipe = usb_sndisocpipe(dev, ep->desc.bEndpointAddress);
-							context->fifos[cidx].usb_transfer_mode = USB_ISOC;
-							iso_packet_size = ep->desc.wMaxPacketSize; // remember max packet size
-#ifdef VERBOSE_USB_DEBUG
-							printk (KERN_INFO "HFC-USB: ISO Endpoint found (idx:%d cidx:%d)!\n",
-								idx, cidx);
-#endif
-							break;
-						default:
-							context->fifos[cidx].pipe = 0;	/* reset data */
-					}	/* switch attribute */
-
-					if (context->fifos[cidx].pipe) {
-						context->fifos[cidx].fifonum = cidx;
-						context->fifos[cidx].hfc = context;
-						context->fifos[cidx].usb_packet_maxlen = ep->desc.wMaxPacketSize;
-						context->fifos[cidx].intervall = ep->desc.bInterval;
-						context->fifos[cidx].skbuff = NULL;
-#ifdef VERBOSE_USB_DEBUG
-						printk (KERN_INFO "HFC-USB: fifo%d pktlen %d interval %d\n",
-							context->fifos[cidx].fifonum,
-							context->fifos[cidx].usb_packet_maxlen,
-							context->fifos[cidx].intervall);
-#endif
-					}
-				}
-
-				ep++;
-			}
-
-			// now share our luck
-			context->dev = dev;						/* save device */
-			context->if_used = ifnum;					/* save used interface */
-			context->alt_used = alt_used;					/* and alternate config */
-			context->ctrl_paksize = dev->descriptor.bMaxPacketSize0;	/* control size */
-			context->cfg_used=vcf[16];					// store used config
-			context->vend_idx=vend_idx;					// store found vendor
-			context->packet_size=packet_size;
-			context->iso_packet_size=iso_packet_size;
-
-			/* create the control pipes needed for register access */
-			context->ctrl_in_pipe = usb_rcvctrlpipe(context->dev, 0);
-			context->ctrl_out_pipe = usb_sndctrlpipe(context->dev, 0);
-			context->ctrl_urb = usb_alloc_urb(0, GFP_KERNEL);
-
-			printk(KERN_INFO "HFC-USB: detected \"%s\" configuration: %s (if=%d alt=%d)\n",
-				vdata[vend_idx].vend_name, conf_str[small_match], context->if_used, context->alt_used);
-
-			/* init the chip and register the driver */
-			if (hfc_usb_hw_init(context))
-			{
-				if (context->ctrl_urb) {
-					usb_unlink_urb(context->ctrl_urb);
-					usb_free_urb(context->ctrl_urb);
-					context->ctrl_urb = NULL;
-				}
-				kfree(context);
-				return(-EIO);
-			}
-			usb_set_intfdata(intf, context);
-			return(0);
-#endif
+	usb_set_intfdata(intf, hfc);
 
 	return 0;
 }
@@ -822,12 +869,10 @@ hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	int *ep_cfg;
 	int ep_cfg_idx;
 	int ep_idx;
+	hfcusb_data *hfc;
 	struct usb_host_interface *host_if;
 	int num_valid_ep;
 	
-	//struct usb_device *dev = interface_to_usbdev(intf);
-	//struct led_info *led = &hfc_led_info[id->driver_info];
-
 	for (alt_idx = 0; alt_idx < intf->num_altsetting; alt_idx++) {
 		num_valid_ep = 0;
 		host_if = &intf->altsetting[alt_idx];
@@ -837,16 +882,13 @@ hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 
 			for (ep_idx = 0; ep_idx < host_if->desc.bNumEndpoints; ep_idx++) {
 				ep = &host_if->endpoint[ep_idx];
-
-				ep_cfg_idx = ((ep->desc.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK) - 1) * 2;
-				if (ep->desc.bEndpointAddress & USB_DIR_IN)
-					ep_cfg_idx++;
-					
+				ep_cfg_idx = get_ep_cfg_idx(ep);
+				
 				if (ep_cfg[ep_cfg_idx] == EP_NOP)
 					continue;
 
 				if ((ep_cfg[ep_cfg_idx] == EP_NUL) || (ep_cfg[ep_cfg_idx] != ep->desc.bmAttributes) || 
-					((ep->desc.bmAttributes == USB_ENDPOINT_XFER_INT) && (ep->desc.bInterval < ep_cfg[17]))) {
+					((ep->desc.bmAttributes == USB_ENDPOINT_XFER_INT) && (ep->desc.bInterval < ep_cfg[16]))) {
 					num_valid_ep = 0;
 					break;
 				}
@@ -855,8 +897,19 @@ hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 			}
 			
 			/* Found valid configuration - initialize device */
-			if (num_valid_ep)
-				return hfc_usb_init_dev(alt_idx, cfg_idx);
+			if (num_valid_ep) {
+				if (!(hfc = kmalloc(sizeof(*hfc), GFP_KERNEL)))
+					return -ENOMEM;
+
+				memset(hfc, 0, sizeof(*hfc));
+
+				hfc->dev = interface_to_usbdev(intf);
+				hfc->led = &hfc_led_info[id->driver_info];
+				hfc->if_used = host_if->desc.bInterfaceNumber;
+				hfc->alt_used = alt_idx;
+
+				return hfc_usb_init_dev(hfc, intf, alt_idx, cfg_idx);
+			}
 		}
 	}
 
@@ -888,13 +941,11 @@ hfc_usb_init(void)
 
 	printk(HFC_USB_INFO "Driver module revision %s loaded\n", hfc_usb_revision);
 
-	if ((err = hfc_usb_misdn_register()))
-	{
+	if ((err = hfc_usb_misdn_register())) {
 		return err;
 	}
 
-	if ((err = usb_register(&hfc_usb_driver)))
-	{
+	if ((err = usb_register(&hfc_usb_driver))) {
 		printk(HFC_USB_ERR "Unable to register module at usb stack (error = %d)\n", err);
 		hfc_usb_misdn_unregister();
 
