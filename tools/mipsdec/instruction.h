@@ -11,7 +11,6 @@ typedef enum {
 	IF_RSRTRD,
 	IF_RSRT,
 	IF_RSRTSI,
-	IF_RTSI,
 	IF_RSSI,
 	IF_RSRTUI,
 	IF_RTUI,

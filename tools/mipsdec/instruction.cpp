@@ -16,6 +16,7 @@ typedef struct
 	unsigned uOpcode;
 	unsigned uSpecialOpcode;
 	unsigned uRegimmOpcode;
+	unsigned uCop0Opcode;
 	const char *pName;
 	tInstructionType eType;
 	tInstructionFormat eFormat;
@@ -23,52 +24,53 @@ typedef struct
 	tInstructionDelaySlot eDelaySlot;
 } tInstructionInfo;
 
-#define DECLARE_OPCODE(type, format, result_field, delayslot) {~0, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
-#define DECLARE_REGULAR_OPCODE(opcode, type, format, result_field, delayslot) {opcode, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
-#define DECLARE_SPECIAL_OPCODE(type, format, result_field, delayslot) {0x00, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
-#define DECLARE_REGIMM_OPCODE(regdimmopcode, type, format, result_field, delayslot) {0x01, ~0, regdimmopcode, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_REGULAR_OPCODE(opcode, type, format, result_field, delayslot) {opcode, ~0, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_SPECIAL_OPCODE(specialopcode, type, format, result_field, delayslot) {0x00, specialopcode, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_REGIMM_OPCODE(regdimmopcode, type, format, result_field, delayslot) {0x01, ~0, regdimmopcode, ~0, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_COP0_OPCODE(cop0opcode, type, format, result_field, delayslot) {0x10, ~0, ~0, cop0opcode, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_VIRTUAL_OPCODE(type, format, result_field, delayslot) {~0, ~0, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
 
 static tInstructionInfo s_InstructionInfo[] = 
 {
-	DECLARE_OPCODE(ADDU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x21, ADDU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
 	DECLARE_REGULAR_OPCODE(0x09, ADDIU,	IF_RSRTSI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(AND,		IF_RSRTRD,	RF_RD,		IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x24, AND,		IF_RSRTRD,	RF_RD,		IDS_NONE),
 	DECLARE_REGULAR_OPCODE(0x0C, ANDI,	IF_RSRTUI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(BEQ,		IF_RSRTSI,	RF_NONE,	IDS_UNCONDITIONAL),
-	DECLARE_OPCODE(BEQL,	IF_RSRTSI,	RF_NONE,	IDS_CONDITIONAL),
+	DECLARE_REGULAR_OPCODE(0x04, BEQ,		IF_RSRTSI,	RF_NONE,	IDS_UNCONDITIONAL),
+	DECLARE_REGULAR_OPCODE(0x14, BEQL,	IF_RSRTSI,	RF_NONE,	IDS_CONDITIONAL),
 	DECLARE_REGIMM_OPCODE (0x00, BLTZ,	IF_RSSI,	RF_NONE,	IDS_UNCONDITIONAL),
-	DECLARE_OPCODE(BNE,		IF_RSRTSI,	RF_NONE,	IDS_UNCONDITIONAL),
-	DECLARE_OPCODE(BNEL,	IF_RSRTSI,	RF_NONE,	IDS_CONDITIONAL),
-	DECLARE_OPCODE(J,		IF_NOARG,	RF_NONE,	IDS_UNCONDITIONAL),
-	DECLARE_OPCODE(JALR,	IF_RSRD,	RF_NONE,	IDS_UNCONDITIONAL),
-	DECLARE_OPCODE(JR,		IF_RS,		RF_NONE,	IDS_UNCONDITIONAL),
-	DECLARE_OPCODE(LBU,		IF_RSRTSI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(LH,		IF_RSRTSI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(LHU,		IF_RSRTSI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(LUI,		IF_RTUI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(LW,		IF_RSRTSI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(LWL,		IF_RSRTSI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(LWR,		IF_RSRTSI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(MFC0,	IF_RTRDSEL,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(MFHI,	IF_RD,		RF_RD,		IDS_NONE),
-	DECLARE_OPCODE(MTC0,	IF_RTRDSEL,	RF_NONE,	IDS_NONE),
-	DECLARE_OPCODE(MULT,	IF_RSRT,	RF_NONE,	IDS_NONE),
-	DECLARE_OPCODE(NOP,		IF_NOARG,	RF_NONE,	IDS_NONE),
-	DECLARE_OPCODE(OR,		IF_RSRTRD,	RF_RD,		IDS_NONE),
-	DECLARE_OPCODE(ORI,		IF_RSRTUI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(SB,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
-	DECLARE_OPCODE(SH,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
-	DECLARE_OPCODE(SLL,		IF_RTRDSA,	RF_RD,		IDS_NONE),
-	DECLARE_OPCODE(SLTI,	IF_RSRTSI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(SLTIU,	IF_RSRTSI,	RF_RT,		IDS_NONE),
-	DECLARE_OPCODE(SLTU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
-	DECLARE_OPCODE(SRA,		IF_RTRDSA,	RF_RD,		IDS_NONE),
-	DECLARE_OPCODE(SSNOP,	IF_NOARG,	RF_NONE,	IDS_NONE),
-	DECLARE_OPCODE(SUBU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
-	DECLARE_OPCODE(SW,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
-	DECLARE_OPCODE(SWL,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
-	DECLARE_OPCODE(SWR,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
-	DECLARE_OPCODE(XORI,	IF_RSRTUI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x05, BNE,		IF_RSRTSI,	RF_NONE,	IDS_UNCONDITIONAL),
+	DECLARE_REGULAR_OPCODE(0x15, BNEL,	IF_RSRTSI,	RF_NONE,	IDS_CONDITIONAL),
+	DECLARE_REGULAR_OPCODE(0x02, J,		IF_NOARG,	RF_NONE,	IDS_UNCONDITIONAL),
+	DECLARE_SPECIAL_OPCODE(0x09, JALR,	IF_RSRD,	RF_NONE,	IDS_UNCONDITIONAL),
+	DECLARE_SPECIAL_OPCODE(0x08, JR,		IF_RS,		RF_NONE,	IDS_UNCONDITIONAL),
+	DECLARE_REGULAR_OPCODE(0x24, LBU,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x21, LH,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x25, LHU,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x0F, LUI,		IF_RTUI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x23, LW,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x22, LWL,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x26, LWR,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_COP0_OPCODE   (0x00, MFC0,	IF_RTRDSEL,	RF_RT,		IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x10, MFHI,	IF_RD,		RF_RD,		IDS_NONE),
+	DECLARE_COP0_OPCODE   (0x04, MTC0,	IF_RTRDSEL,	RF_NONE,	IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x18, MULT,	IF_RSRT,	RF_NONE,	IDS_NONE),
+	DECLARE_VIRTUAL_OPCODE(      NOP,		IF_NOARG,	RF_NONE,	IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x25, OR,		IF_RSRTRD,	RF_RD,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x0D, ORI,		IF_RSRTUI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x28, SB,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x29, SH,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x00, SLL,		IF_RTRDSA,	RF_RD,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x0A, SLTI,	IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x0B, SLTIU,	IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x2B, SLTU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x03, SRA,		IF_RTRDSA,	RF_RD,		IDS_NONE),
+	DECLARE_VIRTUAL_OPCODE(      SSNOP,	IF_NOARG,	RF_NONE,	IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x23, SUBU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x2B, SW,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x2A, SWL,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x2E, SWR,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x0E, XORI,	IF_RSRTUI,	RF_RT,		IDS_NONE),
 };
 
 #define NUM_INSTRUCTION_INFO_ENTRIES (sizeof(s_InstructionInfo) / sizeof(s_InstructionInfo[0]))
@@ -137,6 +139,7 @@ bool decodeData(unsigned uInstructionData, unsigned &uInfoIdx)
 
 					if(s_InstructionInfo[uInfoIdx].uSpecialOpcode == uSpecialOpcode)
 					{
+						return true;
 					}
 					break;
 				}
@@ -150,12 +153,23 @@ bool decodeData(unsigned uInstructionData, unsigned &uInfoIdx)
 					}
 					break;
 				}
+				case 0x10: /* COP0 instructions */
+				{
+					unsigned uCop0Opcode = (uInstructionData >> 21) & 0x1F;
+
+					if(s_InstructionInfo[uInfoIdx].uCop0Opcode == uCop0Opcode)
+					{
+						return true;
+					}
+					break;
+				}
 				default:
 					return true;
 			}
 		}
 	}
 
+	M_ASSERT(false);
 	return false;
 }
 
@@ -164,260 +178,98 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 	uAddress = uInstructionAddress;
 
 	unsigned uInfoIdx;
-	if(decodeData(uInstructionData, uInfoIdx))
+	if(!decodeData(uInstructionData, uInfoIdx))
 	{
-		eType = s_InstructionInfo[uInfoIdx].eType;
-
-		switch(s_InstructionInfo[uInfoIdx].eFormat)
-		{
-			default:
-				M_ASSERT(false);
-		}
-
-		return true;
+		return false;
 	}
 
-	unsigned uOpcode = uInstructionData >> 26;
+	eType = s_InstructionInfo[uInfoIdx].eType;
 
-	switch(uOpcode)
+	switch(s_InstructionInfo[uInfoIdx].eFormat)
 	{
-		case 0x00: /* SPECIAL instructions */
-		{
-			unsigned uSpecialOpcode = uInstructionData & 0x3F;
-
-			switch(uSpecialOpcode)
-			{
-				case 0x00:
-				{
-					if(((uInstructionData >> 11) & 0x7FFF) == 0)
-					{
-						unsigned uSllOpcode = (uInstructionData >> 6) & 0x1F;
-
-						switch(uSllOpcode)
-						{
-							case 0x00:
-								decodeNOARG();
-								eType = IT_NOP;
-								break;
-							case 0x01:
-								decodeNOARG();
-								eType = IT_SSNOP;
-								break;
-							default:
-								M_ASSERT(false);
-								printf("Unkown SLLOPCODE: 0x%08X (I-Data: 0x%08X)\n", uSllOpcode, uInstructionData);
-								return false;
-						}
-					}
-					else
-					{
-						decodeRTRDSA(uInstructionData);
-						eType = IT_SLL;
-					}
-					break;
-				}
-				case 0x03:
-					decodeRTRDSA(uInstructionData);
-					eType = IT_SRA;
-					break;
-				case 0x08:
-					decodeRS(uInstructionData);
-					if(uInstructionData & (1 << 10))
-					{
-						eType = IT_JR_HB;
-					}
-					else
-					{
-						eType = IT_JR;
-					}
-					break;
-				case 0x09:
-					decodeRSRD(uInstructionData);
-					if(uInstructionData & (1 << 10))
-					{
-						eType = IT_JALR_HB;
-					}
-					else
-					{
-						eType = IT_JALR;
-					}
-					break;
-				case 0x10:
-					decodeRD(uInstructionData);
-					eType = IT_MFHI;
-					break;
-				case 0x18:
-					decodeRSRT(uInstructionData);
-					eType = IT_MULT;
-					break;
-				case 0x21:
-					decodeRSRTRD(uInstructionData);
-					eType = IT_ADDU;
-					break;
-				case 0x23:
-					decodeRSRTRD(uInstructionData);
-					eType = IT_SUBU;
-					break;
-				case 0x24:
-					decodeRSRTRD(uInstructionData);
-					eType = IT_AND;
-					break;
-				case 0x25:
-					decodeRSRTRD(uInstructionData);
-					eType = IT_OR;
-					break;
-				case 0x2B:
-					decodeRSRTRD(uInstructionData);
-					eType = IT_SLTU;
-					break;
-				default:
-				{
-					unsigned uOp1 = uSpecialOpcode >> 3;
-					unsigned uOp2 = uSpecialOpcode & 7;
-
-					M_ASSERT(false);
-					printf("Unkown SECIALOPCODE: 0x%08X (I-Data: 0x%08X)\n", uSpecialOpcode, uInstructionData);
-
-					return false;
-				}
-			}
-			break;
-		}
-		case 0x02:
+		case IF_NOARG:
 			decodeNOARG();
-			eType = IT_J;
-			uJumpAddress = ((uAddress + 4) & ~0xFFFFFFF) | ((uInstructionData & 0x3FFFFFF) << 2);
 			break;
-		case 0x04:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_BEQ;
-			uJumpAddress = uAddress + 4 + (iSI << 2);
+		case IF_RSRTRD:
+			decodeRSRTRD(uInstructionData);
 			break;
-		case 0x05:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_BNE;
-			uJumpAddress = uAddress + 4 + (iSI << 2);
+		case IF_RSRT:
+			decodeRSRT(uInstructionData);
 			break;
-		/*case 0x09:
+		case IF_RSRTSI:
 			decodeRSRTSI(uInstructionData);
-			eType = IT_ADDIU;
-			break;*/
-		case 0x0A:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_SLTI;
 			break;
-		case 0x0B:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_SLTIU;
+		case IF_RSSI:
+			decodeRSSI(uInstructionData);
 			break;
-		/*case 0x0C:
+		case IF_RSRTUI:
 			decodeRSRTUI(uInstructionData);
-			eType = IT_ANDI;
-			break;*/
-		case 0x0D:
-			// CHECKME: signed or not?
-			decodeRSRTUI(uInstructionData);
-			eType = IT_ORI;
 			break;
-		case 0x0E:
-			decodeRSRTUI(uInstructionData);
-			eType = IT_XORI;
-			break;
-		case 0x0F:
+		case IF_RTUI:
 			decodeRTUI(uInstructionData);
-			eType = IT_LUI;
 			break;
-		case 0x10: /* COP0 instructions */
-		{
-			unsigned uCop0Opcode = (uInstructionData >> 21) & 0x1F;
-
-			switch(uCop0Opcode)
-			{
-				case 0x00:
-					decodeRTRDSEL(uInstructionData);
-					eType = IT_MFC0;
-					break;
-				case 0x04:
-					decodeRTRDSEL(uInstructionData);
-					eType = IT_MTC0;
-					break;
-				default:
-				{
-					unsigned uOp1 = uCop0Opcode >> 3;
-					unsigned uOp2 = uCop0Opcode & 7;
-
-					M_ASSERT(false);
-					printf("Unkown COP0OPCODE: 0x%08X (I-Data: 0x%08X)\n", uCop0Opcode, uInstructionData);
-					return false;
-				}
-			}
+		case IF_RTRDSA:
+			decodeRTRDSA(uInstructionData);
 			break;
-		}
-		case 0x14:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_BEQL;
-			uJumpAddress = uAddress + 4 + (iSI << 2);
+		case IF_RSRD:
+			decodeRSRD(uInstructionData);
 			break;
-		case 0x15:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_BNEL;
-			uJumpAddress = uAddress + 4 + (iSI << 2);
+		case IF_RD:
+			decodeRD(uInstructionData);
 			break;
-		case 0x21:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_LH;
+		case IF_RS:
+			decodeRS(uInstructionData);
 			break;
-		case 0x22:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_LWL;
-			break;
-		case 0x23:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_LW;
-			break;
-		case 0x24:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_LBU;
-			break;
-		case 0x25:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_LHU;
-			break;
-		case 0x26:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_LWR;
-			break;
-		case 0x28:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_SB;
-			break;
-		case 0x29:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_SH;
-			break;
-		case 0x2A:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_SWL;
-			break;
-		case 0x2B:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_SW;
-			break;
-		case 0x2E:
-			decodeRSRTSI(uInstructionData);
-			eType = IT_SWR;
+		case IF_RTRDSEL:
+			decodeRTRDSEL(uInstructionData);
 			break;
 		default:
-		{
-			unsigned uOp1 = uOpcode >> 3;
-			unsigned uOp2 = uOpcode & 7;
-
 			M_ASSERT(false);
-			printf("Unkown OPCODE: 0x%08X (I-Data: 0x%08X)\n", uOpcode, uInstructionData);
 			return false;
-		}
 	}
-	
+
+	switch(eType)
+	{
+		case IT_BEQ:
+		case IT_BEQL:
+		case IT_BLTZ:
+		case IT_BNE:
+		case IT_BNEL:
+			uJumpAddress = uAddress + 4 + (iSI << 2);
+			break;
+		case IT_J:
+			uJumpAddress = ((uAddress + 4) & ~0xFFFFFFF) | ((uInstructionData & 0x3FFFFFF) << 2);
+			break;
+		case IT_JALR:
+			if(uInstructionData & (1 << 10))
+			{
+				eType = IT_JALR_HB;
+			}
+			break;
+		case IT_JR:
+			if(uInstructionData & (1 << 10))
+			{
+				eType = IT_JR_HB;
+			}
+			break;
+		case IT_SLL:
+			if((eRT == R_ZERO) && (eRD == R_ZERO))
+			{
+				switch(uSA)
+				{
+					case 0x00:
+						decodeNOARG();
+						eType = IT_NOP;
+						break;
+					case 0x01:
+						decodeNOARG();
+						eType = IT_SSNOP;
+						break;
+				}
+			}
+			break;
+	}
+
 	return true;
 }
 
@@ -805,22 +657,29 @@ void dumpInstructions(const tInstList &collInstList)
 				sprintf(pBuf, "\t%s,0x%X", getRegName(collInstList[uInstructionIdx].eRT), collInstList[uInstructionIdx].uUI);
 				strArg = pBuf;
 				break;
-			case IF_RTSI:
-				sprintf(pBuf, "\t%s,%d", getRegName(collInstList[uInstructionIdx].eRT), collInstList[uInstructionIdx].iSI);
-				strArg = pBuf;
-				break;
 			case IF_RSSI:
 				sprintf(pBuf, "\t%s,%d", getRegName(collInstList[uInstructionIdx].eRS), collInstList[uInstructionIdx].iSI);
+				strArg = pBuf;
+				break;
+			case IF_RSRT:
+				sprintf(pBuf, "\t%s,%s", getRegName(collInstList[uInstructionIdx].eRS), getRegName(collInstList[uInstructionIdx].eRT));
 				strArg = pBuf;
 				break;
 			case IF_RSRTSI:
 				sprintf(pBuf, "\t%s,%s,%d", getRegName(collInstList[uInstructionIdx].eRS), getRegName(collInstList[uInstructionIdx].eRT), collInstList[uInstructionIdx].iSI);
 				strArg = pBuf;
 				break;
+			case IF_RD:
+				sprintf(pBuf, "\t%s", getRegName(collInstList[uInstructionIdx].eRD));
+				strArg = pBuf;
+				break;
 			case IF_RS:
 				sprintf(pBuf, "\t%s", getRegName(collInstList[uInstructionIdx].eRS));
 				strArg = pBuf;
 				break;
+			case IF_RTRDSA:
+				sprintf(pBuf, "\t%s,%s,%d", getRegName(collInstList[uInstructionIdx].eRT), getRegName(collInstList[uInstructionIdx].eRD), collInstList[uInstructionIdx].uSA);
+				strArg = pBuf;
 			case IF_RTRDSEL:
 				//sprintf(pBuf, "\t%s,%s,%d", getRegName(collInstList[uInstructionIdx].eRT), getRegName(collInstList[uInstructionIdx].eRD), collInstList[uInstructionIdx].uSEL);
 				sprintf(pBuf, "\t%s,%d,%d", getRegName(collInstList[uInstructionIdx].eRT), collInstList[uInstructionIdx].eRD, collInstList[uInstructionIdx].uSEL);
