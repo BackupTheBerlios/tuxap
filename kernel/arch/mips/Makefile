@@ -321,12 +321,6 @@ libs-$(CONFIG_MIPS_XXS1500)	+= arch/mips/au1000/xxs1500/
 load-$(CONFIG_MIPS_XXS1500)	+= 0xffffffff80100000
 
 #
-# Baget/MIPS
-#
-libs-$(CONFIG_BAGET_MIPS)	+= arch/mips/baget/ arch/mips/baget/prom/
-load-$(CONFIG_BAGET_MIPS)	+= 0xffffffff80001000
-
-#
 # Cobalt Server
 #
 core-$(CONFIG_MIPS_COBALT)	+= arch/mips/cobalt/
@@ -362,12 +356,6 @@ load-$(CONFIG_MIPS_EV96100)	+= 0xffffffff80100000
 core-$(CONFIG_ITE_BOARD_GEN)	+= arch/mips/ite-boards/generic/
 core-$(CONFIG_MIPS_IVR)		+= arch/mips/ite-boards/ivr/
 load-$(CONFIG_MIPS_IVR)		+= 0xffffffff80100000
-
-#
-# HP LaserJet
-#
-core-$(CONFIG_HP_LASERJET)	+= arch/mips/hp-lj/
-load-$(CONFIG_HP_LASERJET)	+= 0xffffffff80030000
 
 #
 # ITE 8172 eval board with QED 5231 CPU
@@ -555,6 +543,7 @@ ifdef CONFIG_BUILD_ELF64
 ifdef CONFIG_MAPPED_KERNEL
 load-$(CONFIG_SGI_IP27)		+= 0xc00000004001c000
 OBJCOPYFLAGS			:= --change-addresses=0x3fffffff80000000
+dataoffset-$(CONFIG_SGI_IP27)	+= 0x01000000
 else
 load-$(CONFIG_SGI_IP27)		+= 0xa80000000001c000
 OBJCOPYFLAGS			:= --change-addresses=0x57ffffff80000000
@@ -563,6 +552,7 @@ else
 ifdef CONFIG_MAPPED_KERNEL
 load-$(CONFIG_SGI_IP27)		+= 0xffffffffc001c000
 OBJCOPYFLAGS			:= --change-addresses=0xc000000080000000
+dataoffset-$(CONFIG_SGI_IP27)	+= 0x01000000
 else
 load-$(CONFIG_SGI_IP27)		+= 0xffffffff8001c000
 OBJCOPYFLAGS			:= --change-addresses=0xa800000080000000
@@ -675,7 +665,7 @@ CPPFLAGS_vmlinux.lds := \
 	$(CFLAGS) \
 	-D"LOADADDR=$(load-y)" \
 	-D"JIFFIES=$(JIFFIES)" \
-	-imacros $(srctree)/include/asm-$(ARCH)/sn/mapped_kernel.h
+	-D"DATAOFFSET=$(if $(dataoffset-y),$(dataoffset-y),0)"
 
 head-y := arch/mips/kernel/head.o arch/mips/kernel/init_task.o
 
@@ -684,15 +674,6 @@ libs-$(CONFIG_MIPS32)	+= arch/mips/lib-32/
 libs-$(CONFIG_MIPS64)	+= arch/mips/lib-64/
 
 core-y			+= arch/mips/kernel/ arch/mips/mm/ arch/mips/math-emu/
-
-ifdef CONFIG_BAGET_MIPS
-
-BAGETBOOT = $(MAKE) -C arch/$(ARCH)/baget
-
-balo: vmlinux
-	$(BAGETBOOT) balo
-
-endif
 
 ifdef CONFIG_LASAT
 rom.bin rom.sw: vmlinux
@@ -741,7 +722,6 @@ CLEAN_FILES += vmlinux.ecoff \
 
 archclean:
 	@$(MAKE) $(clean)=arch/mips/boot
-	@$(MAKE) $(clean)=arch/mips/baget
 	@$(MAKE) $(clean)=arch/mips/lasat
 
 # Generate <asm/offset.h 

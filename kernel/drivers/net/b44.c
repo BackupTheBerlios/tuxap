@@ -9,6 +9,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/types.h>
 #include <linux/netdevice.h>
 #include <linux/ethtool.h>
@@ -28,8 +29,8 @@
 
 #define DRV_MODULE_NAME		"b44"
 #define PFX DRV_MODULE_NAME	": "
-#define DRV_MODULE_VERSION	"0.94"
-#define DRV_MODULE_RELDATE	"May 4, 2004"
+#define DRV_MODULE_VERSION	"0.95"
+#define DRV_MODULE_RELDATE	"Aug 3, 2004"
 
 #define B44_DEF_MSG_ENABLE	  \
 	(NETIF_MSG_DRV		| \
@@ -58,6 +59,7 @@
 #define B44_DEF_TX_RING_PENDING		(B44_TX_RING_SIZE - 1)
 #define B44_TX_RING_BYTES	(sizeof(struct dma_desc) * \
 				 B44_TX_RING_SIZE)
+#define B44_DMA_MASK 0x3fffffff
 
 #define TX_RING_GAP(BP)	\
 	(B44_TX_RING_SIZE - (BP)->tx_pending)
@@ -68,6 +70,7 @@
 #define NEXT_TX(N)		(((N) + 1) & (B44_TX_RING_SIZE - 1))
 
 #define RX_PKT_BUF_SZ		(1536 + bp->rx_offset + 64)
+#define TX_PKT_BUF_SZ		(B44_MAX_MTU + ETH_HLEN + 8)
 
 /* minimum number of free TX descriptors required to wake up TX process */
 #define B44_TX_WAKEUP_THRESH		(B44_TX_RING_SIZE / 4)
@@ -75,13 +78,14 @@
 static char version[] __devinitdata =
 	DRV_MODULE_NAME ".c:v" DRV_MODULE_VERSION " (" DRV_MODULE_RELDATE ")\n";
 
-MODULE_AUTHOR("David S. Miller (davem@redhat.com)");
+MODULE_AUTHOR("Florian Schirmer, Pekka Pietikainen, David S. Miller");
 MODULE_DESCRIPTION("Broadcom 4400/47xx 10/100 PCI ethernet driver");
 MODULE_LICENSE("GPL");
-MODULE_PARM(b44_debug, "i");
-MODULE_PARM_DESC(b44_debug, "B44 bitmapped debugging message enable value");
+MODULE_VERSION(DRV_MODULE_VERSION);
 
 static int b44_debug = -1;	/* -1 == use B44_DEF_MSG_ENABLE as value */
+module_param(b44_debug, int, 0);
+MODULE_PARM_DESC(b44_debug, "B44 bitmapped debugging message enable value");
 
 static struct pci_device_id b44_pci_tbl[] = {
 	{ PCI_VENDOR_ID_BROADCOM, PCI_DEVICE_ID_BCM4401,
@@ -100,6 +104,10 @@ MODULE_DEVICE_TABLE(pci, b44_pci_tbl);
 static void b44_halt(struct b44 *);
 static void b44_init_rings(struct b44 *);
 static void b44_init_hw(struct b44 *);
+static int b44_poll(struct net_device *dev, int *budget);
+#ifdef CONFIG_NET_POLL_CONTROLLER
+static void b44_poll_controller(struct net_device *dev);
+#endif
 
 static int b44_wait_bit(struct b44 *bp, unsigned long reg,
 			u32 bit, unsigned long timeout, const int clear)
@@ -639,10 +647,30 @@ static int b44_alloc_rx_skb(struct b44 *bp, int src_idx, u32 dest_idx_unmasked)
 	if (skb == NULL)
 		return -ENOMEM;
 
-	skb->dev = bp->dev;
 	mapping = pci_map_single(bp->pdev, skb->data,
 				 RX_PKT_BUF_SZ,
 				 PCI_DMA_FROMDEVICE);
+
+	/* Hardware bug work-around, the chip is unable to do PCI DMA
+	   to/from anything above 1GB :-( */
+	if(mapping+RX_PKT_BUF_SZ > B44_DMA_MASK) {
+		/* Sigh... */
+		pci_unmap_single(bp->pdev, mapping, RX_PKT_BUF_SZ,PCI_DMA_FROMDEVICE);
+		dev_kfree_skb_any(skb);
+		skb = __dev_alloc_skb(RX_PKT_BUF_SZ,GFP_DMA);
+		if (skb == NULL)
+			return -ENOMEM;
+		mapping = pci_map_single(bp->pdev, skb->data,
+					 RX_PKT_BUF_SZ,
+					 PCI_DMA_FROMDEVICE);
+		if(mapping+RX_PKT_BUF_SZ > B44_DMA_MASK) {
+			pci_unmap_single(bp->pdev, mapping, RX_PKT_BUF_SZ,PCI_DMA_FROMDEVICE);
+			dev_kfree_skb_any(skb);
+			return -ENOMEM;
+		}
+	}
+
+	skb->dev = bp->dev;
 	skb_reserve(skb, bp->rx_offset);
 
 	rh = (struct rx_header *)
@@ -920,6 +948,12 @@ static int b44_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	entry = bp->tx_prod;
 	mapping = pci_map_single(bp->pdev, skb->data, len, PCI_DMA_TODEVICE);
+	if(mapping+len > B44_DMA_MASK) {
+		/* Chip can't handle DMA to/from >1GB, use bounce buffer */
+		pci_unmap_single(bp->pdev, mapping, len,PCI_DMA_TODEVICE);
+		memcpy(bp->tx_bufs+entry*TX_PKT_BUF_SZ,skb->data,skb->len);
+		mapping = pci_map_single(bp->pdev, bp->tx_bufs+entry*TX_PKT_BUF_SZ, len, PCI_DMA_TODEVICE);
+	}
 
 	bp->tx_buffers[entry].skb = skb;
 	pci_unmap_addr_set(&bp->tx_buffers[entry], mapping, mapping);
@@ -1067,6 +1101,11 @@ static void b44_free_consistent(struct b44 *bp)
 				    bp->tx_ring, bp->tx_ring_dma);
 		bp->tx_ring = NULL;
 	}
+	if (bp->tx_bufs) {
+		pci_free_consistent(bp->pdev, B44_TX_RING_SIZE * TX_PKT_BUF_SZ,
+				    bp->tx_bufs, bp->tx_bufs_dma);
+		bp->tx_bufs = NULL;
+	}
 }
 
 /*
@@ -1088,6 +1127,12 @@ static int b44_alloc_consistent(struct b44 *bp)
 	if (!bp->tx_buffers)
 		goto out_err;
 	memset(bp->tx_buffers, 0, size);
+
+	size = B44_TX_RING_SIZE * TX_PKT_BUF_SZ;
+	bp->tx_bufs = pci_alloc_consistent(bp->pdev, size, &bp->tx_bufs_dma);
+	if (!bp->tx_bufs)
+		goto out_err;
+	memset(bp->tx_bufs, 0, size);
 
 	size = DMA_TABLE_BYTES;
 	bp->rx_ring = pci_alloc_consistent(bp->pdev, size, &bp->rx_ring_dma);
@@ -1293,6 +1338,19 @@ err_out_free:
 	pci_read_config_word(bp->pdev, PCI_STATUS, &val16);
 	printk("DEBUG: PCI status [%04x] \n", val16);
 
+}
+#endif
+
+#ifdef CONFIG_NET_POLL_CONTROLLER
+/*
+ * Polling receive - used by netconsole and other diagnostic tools
+ * to allow network i/o with interrupts disabled.
+ */
+static void b44_poll_controller(struct net_device *dev)
+{
+	disable_irq(dev->irq);
+	b44_interrupt(dev->irq, dev, NULL);
+	enable_irq(dev->irq);
 }
 #endif
 
@@ -1760,11 +1818,18 @@ static int __devinit b44_init_one(struct pci_dev *pdev,
 
 	pci_set_master(pdev);
 
-	err = pci_set_dma_mask(pdev, (u64) 0xffffffff);
+	err = pci_set_dma_mask(pdev, (u64) B44_DMA_MASK);
 	if (err) {
 		printk(KERN_ERR PFX "No usable DMA configuration, "
 		       "aborting.\n");
 		goto err_out_free_res;
+	}
+	
+	err = pci_set_consistent_dma_mask(pdev, (u64) B44_DMA_MASK);
+	if (err) {
+	  printk(KERN_ERR PFX "No usable DMA configuration, "
+		 "aborting.\n");
+	  goto err_out_free_res;
 	}
 
 	b44reg_base = pci_resource_start(pdev, 0);
@@ -1815,6 +1880,9 @@ static int __devinit b44_init_one(struct pci_dev *pdev,
 	dev->poll = b44_poll;
 	dev->weight = 64;
 	dev->watchdog_timeo = B44_TX_TIMEOUT;
+#ifdef CONFIG_NET_POLL_CONTROLLER
+	dev->poll_controller = b44_poll_controller;
+#endif
 	dev->change_mtu = b44_change_mtu;
 	dev->irq = pdev->irq;
 	SET_ETHTOOL_OPS(dev, &b44_ethtool_ops);
@@ -1849,7 +1917,7 @@ static int __devinit b44_init_one(struct pci_dev *pdev,
 
 	pci_set_drvdata(pdev, dev);
 
-	pci_save_state(bp->pdev, bp->pci_cfg_state);
+	pci_save_state(bp->pdev);
 
 	printk(KERN_INFO "%s: Broadcom %s 10/100BaseT Ethernet ", dev->name,
 		(pdev->device == PCI_DEVICE_ID_BCM4713) ? "47xx" : "4400");
@@ -1893,7 +1961,7 @@ static void __devexit b44_remove_one(struct pci_dev *pdev)
 static int b44_suspend(struct pci_dev *pdev, u32 state)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
-	struct b44 *bp = dev->priv;
+	struct b44 *bp = netdev_priv(dev);
 
         if (!netif_running(dev))
                  return 0;
@@ -1914,9 +1982,9 @@ static int b44_suspend(struct pci_dev *pdev, u32 state)
 static int b44_resume(struct pci_dev *pdev)
 {
 	struct net_device *dev = pci_get_drvdata(pdev);
-	struct b44 *bp = dev->priv;
+	struct b44 *bp = netdev_priv(dev);
 
-	pci_restore_state(pdev, bp->pci_cfg_state);
+	pci_restore_state(pdev);
 
 	if (!netif_running(dev))
 		return 0;
