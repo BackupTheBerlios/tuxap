@@ -9,8 +9,45 @@ bool resolveDelaySlots(tInstList &collInstList)
 
 	while(itCurr != itEnd)
 	{
-		if(!itCurr->bDelaySlotReordered)
+		if((!itCurr->bDelaySlotReordered) && (itCurr->getDelaySlotType() != IDS_NONE))
 		{
+			M_ASSERT((itCurr + 1) < itEnd);
+			itCurr->bDelaySlotReordered = true;
+
+			switch(itCurr->getDelaySlotType())
+			{
+				case IDS_CONDITIONAL:
+				{
+					M_ASSERT(itCurr->getClassType() == IC_BRANCH);
+
+					/* Move delay slot instruction into if branch */
+					itCurr->collIfBranch.push_back(*(itCurr + 1));
+					collInstList.erase(itCurr + 1);
+					break;
+				}
+				case IDS_UNCONDITIONAL:
+					/* Swap master and delay slot instruction */
+					itCurr->swap(*(itCurr + 1), false);
+					itCurr++;
+					break;
+				default:
+					M_ASSERT(false);
+					return false;
+			}
+
+			if(itCurr->getClassType() != IC_JUMP)
+			{
+				/* Close if branch using the original jump address */
+				Instruction aInstruction;
+				aInstruction.encodeAbsoluteJump(itCurr->uJumpAddress);
+				itCurr->collIfBranch.push_back(aInstruction);
+			}
+
+			/* Restart from beginning - iterators might be broken */
+			itCurr = collInstList.begin();
+			itEnd = collInstList.end();
+
+#if 0
 			switch(itCurr->eType)
 			{
 				case IT_J:
@@ -125,6 +162,7 @@ bool resolveDelaySlots(tInstList &collInstList)
 					continue;
 				}
 			}
+#endif
 		}
 
 		itCurr++;

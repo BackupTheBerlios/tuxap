@@ -28,6 +28,12 @@ typedef enum {
 } tInstructionDelaySlot;
 
 typedef enum {
+	IC_BRANCH,
+	IC_JUMP,
+	IC_OTHER,
+} tInstructionClass;
+
+typedef enum {
 	IT_ADDIU,		// No delay slot
 	IT_ADDU,		// No delay slot
 	IT_AND,			// No delay slot
@@ -87,6 +93,8 @@ public:
 	bool parse(unsigned uInstructionData, unsigned uInstructionAddress);
 	bool modifiesRegister(tRegister eRegister) const;
 	void encodeRegisterMove(tRegister eSrcRegister, tRegister eDstRegister);
+	tInstructionDelaySlot getDelaySlotType(void);
+	tInstructionClass getClassType(void);
 
 	unsigned uAddress;
 	tInstructionType eType;

@@ -37,17 +37,11 @@ int main(int argc, char **argv)
 	optimizeInstructions(collInstList);
 	//dumpInstructions(collInstList);
 	updateJumpTargets(collInstList);
+	dumpInstructions(collInstList);
 
 	FILE *pCodeFile = fopen("code.c", "w");
 	generateCode(pCodeFile, collInstList);
 	fclose(pCodeFile);
-
-#ifdef _WIN32
-//	while(1)
-	{
-//Sleep(1);
-	}
-#endif
 
 	return 0;
 }

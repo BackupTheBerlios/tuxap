@@ -313,6 +313,28 @@ void Instruction::encodeRegisterMove(tRegister eSrcRegister, tRegister eDstRegis
 	eRD = eDstRegister;
 }
 
+tInstructionDelaySlot Instruction::getDelaySlotType(void)
+{
+	return s_InstructionInfo[getInstructionInfoIdx(eType)].eDelaySlot;
+}
+
+tInstructionClass Instruction::getClassType(void)
+{
+	/* FIXME: HACK! HACK! */
+	switch(s_InstructionInfo[getInstructionInfoIdx(eType)].pName[0])
+	{
+		case 'B':
+			M_ASSERT(s_InstructionInfo[getInstructionInfoIdx(eType)].eDelaySlot != IDS_NONE);
+			return IC_BRANCH;
+		case 'J':
+			M_ASSERT(s_InstructionInfo[getInstructionInfoIdx(eType)].eDelaySlot != IDS_NONE);
+			return IC_JUMP;
+		default:
+			M_ASSERT(s_InstructionInfo[getInstructionInfoIdx(eType)].eDelaySlot == IDS_NONE);
+			return IC_OTHER;
+	}
+}
+
 void Instruction::setDefaults(void)
 {
 	eFormat = IF_UNKNOWN;
