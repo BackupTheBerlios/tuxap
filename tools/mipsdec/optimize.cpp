@@ -75,19 +75,8 @@ bool resolveDelaySlots(tInstList &collInstList)
 					/* to handle the branch in the correct way...              */
 					switch((itCurr + 1)->eType)
 					{
-						//case IT_J:
-							/* Jump address not in register */
-						//	break;
 						case IT_BEQ:
-						//case IT_BLTZ:
-						//case IT_BNE:
-							if(itCurr->modifiesRegister((itCurr + 1)->eRS))
-							{
-								Instruction aInstruction;
-								aInstruction.encodeRegisterMove((itCurr + 1)->eRS, getDSBRegister((itCurr + 1)->eRS));
-								(itCurr + 1)->eRS = getDSBRegister((itCurr + 1)->eRS);
-								collInstList.insert(itCurr, aInstruction);
-							}
+						case IT_BNE:
 							if(itCurr->modifiesRegister((itCurr + 1)->eRT))
 							{
 								Instruction aInstruction;
@@ -95,9 +84,18 @@ bool resolveDelaySlots(tInstList &collInstList)
 								(itCurr + 1)->eRT = getDSBRegister((itCurr + 1)->eRT);
 								collInstList.insert(itCurr, aInstruction);
 							}
+							/* Fall through */
+						case IT_BLTZ:
+							if(itCurr->modifiesRegister((itCurr + 1)->eRS))
+							{
+								Instruction aInstruction;
+								aInstruction.encodeRegisterMove((itCurr + 1)->eRS, getDSBRegister((itCurr + 1)->eRS));
+								(itCurr + 1)->eRS = getDSBRegister((itCurr + 1)->eRS);
+								collInstList.insert(itCurr, aInstruction);
+							}
 							break;
-						//default:
-							//M_ASSERT(false);
+						default:
+							M_ASSERT(false);
 					}
 
 					itCurr = collInstList.begin();
@@ -105,6 +103,7 @@ bool resolveDelaySlots(tInstList &collInstList)
 
 					continue;
 				}
+				case IT_BEQL:
 				case IT_BNEL:
 				{
 					itCurr->bDelaySlotReordered = true;

@@ -97,6 +97,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				break;
 			}
 			case IT_BEQ:
+			case IT_BEQL:
 			{
 				fprintf(pDestFile, "\n");
 				doIndent(pDestFile, uDepth);

@@ -3,21 +3,73 @@
 #include "common.h"
 #include "symbols.h"
 
+typedef enum
+{
+	RF_NONE,
+	RF_RD,
+	RF_RS,
+	RF_RT,
+} tResultField;
+
 typedef struct
 {
+	const char *pName;
 	tInstructionType eType;
 	tInstructionFormat eFormart;
-	tRegister eResultRegister;
+	tResultField eResultField;
 	tInstructionDelaySlot eDelaySlot;
 } tInstructionInfo;
 
-#define DECLARE_OPCODE(type, format, res_reg, delayslot) {type, format, res_reg, delayslot}
+#define DECLARE_OPCODE(type, format, result_field, delayslot) {#type, IT_##type, format, result_field, delayslot}
 
 static tInstructionInfo s_InstructionInfo[] = 
 {
-	DECLARE_OPCODE(IT_J, IF_NOARG, R_UNKNOWN, IDS_UNCONDITIONAL),
-	DECLARE_OPCODE(IT_J, IF_NOARG, R_UNKNOWN, IDS_UNCONDITIONAL),
+	DECLARE_OPCODE(ADDU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
+	DECLARE_OPCODE(ADDIU,	IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(ANDI,	IF_RSRTUI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(BEQL,	IF_RSRTSI,	RF_NONE,	IDS_CONDITIONAL),
+	DECLARE_OPCODE(J,			IF_NOARG,		RF_NONE,	IDS_UNCONDITIONAL),
+	DECLARE_OPCODE(JR,		IF_RS,			RF_NONE,	IDS_UNCONDITIONAL),
+	DECLARE_OPCODE(LBU,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(LH,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(LHU,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(LW,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(LWL,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(LWR,		IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(MULT,	IF_RSRT,		RF_NONE,	IDS_NONE),
+	DECLARE_OPCODE(MFHI,	IF_RD,			RF_RD,		IDS_NONE),
+	DECLARE_OPCODE(NOP,		IF_NOARG,		RF_NONE,	IDS_NONE),
+	DECLARE_OPCODE(ORI,		IF_RSRTUI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(SB,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
+	DECLARE_OPCODE(SH,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
+	DECLARE_OPCODE(SLL,		IF_RTRDSA,	RF_RD,		IDS_NONE),
+	DECLARE_OPCODE(SLTI,	IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_OPCODE(SLTU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
+	DECLARE_OPCODE(SRA,		IF_RTRDSA,	RF_RD,		IDS_NONE),
+	DECLARE_OPCODE(SUBU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
+	DECLARE_OPCODE(SW,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
+	DECLARE_OPCODE(SWL,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
+	DECLARE_OPCODE(SWR,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
 };
+
+#define NUM_INSTRUCTION_INFO_ENTRIES (sizeof(s_InstructionInfo) / sizeof(s_InstructionInfo[0]))
+
+static unsigned getInstructionInfoIdx(tInstructionType eType)
+{
+	unsigned uInfoIdx;
+
+	for(uInfoIdx = 0; uInfoIdx < NUM_INSTRUCTION_INFO_ENTRIES; uInfoIdx++)
+	{
+		if(s_InstructionInfo[uInfoIdx].eType == eType)
+		{
+			return uInfoIdx;
+		}
+	}
+
+	M_ASSERT(false);
+
+	return 0;
+}
 
 static unsigned calcSymFileOffset(unsigned uSymAddress)
 {
@@ -88,6 +140,7 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 					}
 					else
 					{
+						decodeRTRDSA(uInstructionData);
 						eType = IT_SLL;
 					}
 					break;
@@ -322,26 +375,24 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 
 bool Instruction::modifiesRegister(tRegister eRegister) const
 {
-	switch(eType)
+	M_ASSERT(eRegister != R_UNKNOWN);
+
+	switch(s_InstructionInfo[getInstructionInfoIdx(eType)].eResultField)
 	{
-		case IT_ADDIU:
-			return eRT == eRegister;
-		case IT_ADDU:
+		case RF_NONE:
+			return false;
+		case RF_RD:
+			M_ASSERT(eRD != R_UNKNOWN);
 			return eRD == eRegister;
-		case IT_LW:
+			break;
+		case RF_RS:
+			M_ASSERT(eRS != R_UNKNOWN);
+			return eRS == eRegister;
+			break;
+		case RF_RT:
+			M_ASSERT(eRT != R_UNKNOWN);
 			return eRT == eRegister;
-		case IT_NOP:
-			return false;
-		case IT_ORI:
-			return eRT == eRegister;
-		case IT_SLTI:
-			return eRT == eRegister;
-		case IT_SB:
-			return false;
-		case IT_SUBU:
-			return eRD == eRegister;
-		case IT_SW:
-			return false;
+			break;
 		default:
 			M_ASSERT(false);
 			return true;
@@ -671,94 +722,7 @@ bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tReg
 
 const char *getInstrName(const Instruction &aInstruction)
 {
-	switch(aInstruction.eType)
-	{
-		case IT_ADDIU:
-			return "addiu";
-		case IT_ADDU:
-			return "addu";
-		case IT_AND:
-			return "and";
-		case IT_ANDI:
-			return "andi";
-		case IT_BEQ:
-			return "beq";
-		case IT_BEQL:
-			return "beql";
-		case IT_BLTZ:
-			return "bltz";
-		case IT_BNE:
-			return "bne";
-		case IT_BNEL:
-			return "bnel";
-		case IT_J:
-			return "j";
-		case IT_JALR:
-			return "jalr";
-		case IT_JALR_HB:
-			return "jalr.hb";
-		case IT_JR:
-			return "jr";
-		case IT_JR_HB:
-			return "jr.hb";
-		case IT_LBU:
-			return "lbu";
-		case IT_LH:
-			return "lh";
-		case IT_LHU:
-			return "lhu";
-		case IT_LUI:
-			return "lui";
-		case IT_LW:
-			return "lw";
-		case IT_LWL:
-			return "lwl";
-		case IT_LWR:
-			return "lwr";
-		case IT_MFC0:
-			return "mfc0";
-		case IT_MFHI:
-			return "mfhi";
-		case IT_MTC0:
-			return "mtc0";
-		case IT_MULT:
-			return "mult";
-		case IT_NOP:
-			return "nop";
-		case IT_OR:
-			return "or";
-		case IT_ORI:
-			return "ori";
-		case IT_SB:
-			return "sb";
-		case IT_SH:
-			return "sh";
-		case IT_SLL:
-			return "sll";
-		case IT_SLTI:
-			return "slti";
-		case IT_SLTIU:
-			return "sltiu";
-		case IT_SLTU:
-			return "sltu";
-		case IT_SRA:
-			return "sra";
-		case IT_SSNOP:
-			return "ssnop";
-		case IT_SUBU:
-			return "subu";
-		case IT_SW:
-			return "sw";
-		case IT_SWL:
-			return "swl";
-		case IT_SWR:
-			return "swr";
-		case IT_XORI:
-			return "xori";
-		default:
-			M_ASSERT(false);
-			return "unkn";
-	}
+	return s_InstructionInfo[getInstructionInfoIdx(aInstruction.eType)].pName;
 }
 
 void dumpInstructions(const tInstList &collInstList)

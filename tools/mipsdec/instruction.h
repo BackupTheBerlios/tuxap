@@ -34,41 +34,41 @@ typedef enum {
 	IT_AND,			// No delay slot
 	IT_ANDI,		// No delay slot
 	IT_BEQ,			// Delay slot
-	IT_BEQL,
+	IT_BEQL,		// Conditional delay slot
 	IT_BLTZ,		// Delay slot
 	IT_BNE,			// Delay slot
-	IT_BNEL,
-	IT_MFHI,
+	IT_BNEL,		// Conditional delay slot
+	IT_MFHI,		// No delay slot
 	IT_J,				// Delay slot
 	IT_JALR,		// Delay slot
 	IT_JALR_HB,	// Delay slot
 	IT_JR,			// Delay slot
 	IT_JR_HB,		// Delay slot
-	IT_LBU,
-	IT_LH,
-	IT_LHU,
+	IT_LBU,			// No delay slot
+	IT_LH,			// No delay slot
+	IT_LHU,			// No delay slot
 	IT_LUI,			// No delay slot
 	IT_LW,			// No delay slot
-	IT_LWL,
-	IT_LWR,
+	IT_LWL,			// No delay slot
+	IT_LWR,			// No delay slot
 	IT_MFC0,		// No delay slot
 	IT_MTC0,		// No delay slot
-	IT_MULT,
+	IT_MULT,		// No delay slot
 	IT_NOP,			// No delay slot
 	IT_OR,			// No delay slot
 	IT_ORI,			// No delay slot
-	IT_SB,
-	IT_SH,
+	IT_SB,			// No delay slot
+	IT_SH,			// No delay slot
 	IT_SLL,			// No delay slot
 	IT_SLTI,		// No delay slot
 	IT_SLTIU,		// No delay slot
-	IT_SLTU,
-	IT_SRA,
+	IT_SLTU,		// No delay slot
+	IT_SRA,			// No delay slot
 	IT_SSNOP,		// No delay slot
-	IT_SUBU,
+	IT_SUBU,		// No delay slot
 	IT_SW,			// No delay slot
-	IT_SWL,
-	IT_SWR,
+	IT_SWL,			// No delay slot
+	IT_SWR,			// No delay slot
 	IT_XORI,		// No delay slot
 } tInstructionType;
 
