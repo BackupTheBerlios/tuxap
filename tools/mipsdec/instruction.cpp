@@ -13,24 +13,30 @@ typedef enum
 
 typedef struct
 {
+	unsigned uOpcode;
+	unsigned uSpecialOpcode;
+	unsigned uRegimmOpcode;
 	const char *pName;
 	tInstructionType eType;
-	tInstructionFormat eFormart;
+	tInstructionFormat eFormat;
 	tResultField eResultField;
 	tInstructionDelaySlot eDelaySlot;
 } tInstructionInfo;
 
-#define DECLARE_OPCODE(type, format, result_field, delayslot) {#type, IT_##type, format, result_field, delayslot}
+#define DECLARE_OPCODE(type, format, result_field, delayslot) {~0, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_REGULAR_OPCODE(opcode, type, format, result_field, delayslot) {opcode, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_SPECIAL_OPCODE(type, format, result_field, delayslot) {0x00, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_REGIMM_OPCODE(regdimmopcode, type, format, result_field, delayslot) {0x01, ~0, regdimmopcode, #type, IT_##type, format, result_field, delayslot}
 
 static tInstructionInfo s_InstructionInfo[] = 
 {
 	DECLARE_OPCODE(ADDU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
-	DECLARE_OPCODE(ADDIU,	IF_RSRTSI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x09, ADDIU,	IF_RSRTSI,	RF_RT,		IDS_NONE),
 	DECLARE_OPCODE(AND,		IF_RSRTRD,	RF_RD,		IDS_NONE),
-	DECLARE_OPCODE(ANDI,	IF_RSRTUI,	RF_RT,		IDS_NONE),
+	DECLARE_REGULAR_OPCODE(0x0C, ANDI,	IF_RSRTUI,	RF_RT,		IDS_NONE),
 	DECLARE_OPCODE(BEQ,		IF_RSRTSI,	RF_NONE,	IDS_UNCONDITIONAL),
 	DECLARE_OPCODE(BEQL,	IF_RSRTSI,	RF_NONE,	IDS_CONDITIONAL),
-	DECLARE_OPCODE(BLTZ,	IF_RSSI,	RF_NONE,	IDS_UNCONDITIONAL),
+	DECLARE_REGIMM_OPCODE (0x00, BLTZ,	IF_RSSI,	RF_NONE,	IDS_UNCONDITIONAL),
 	DECLARE_OPCODE(BNE,		IF_RSRTSI,	RF_NONE,	IDS_UNCONDITIONAL),
 	DECLARE_OPCODE(BNEL,	IF_RSRTSI,	RF_NONE,	IDS_CONDITIONAL),
 	DECLARE_OPCODE(J,		IF_NOARG,	RF_NONE,	IDS_UNCONDITIONAL),
@@ -115,9 +121,61 @@ void Instruction::swap(Instruction &aOtherInstruction, bool bSwapAddress)
 	}
 }
 
+bool decodeData(unsigned uInstructionData, unsigned &uInfoIdx)
+{
+	unsigned uOpcode = uInstructionData >> 26;
+
+	for(uInfoIdx = 0; uInfoIdx < NUM_INSTRUCTION_INFO_ENTRIES; uInfoIdx++)
+	{
+		if(s_InstructionInfo[uInfoIdx].uOpcode == uOpcode)
+		{
+			switch(uOpcode)
+			{
+				case 0x00: /* SPECIAL instructions */
+				{
+					unsigned uSpecialOpcode = uInstructionData & 0x3F;
+
+					if(s_InstructionInfo[uInfoIdx].uSpecialOpcode == uSpecialOpcode)
+					{
+					}
+					break;
+				}
+				case 0x01: /* REGIMM instructions */
+				{
+					unsigned uRegimmOpcode = (uInstructionData >> 16) & 0x1F;
+
+					if(s_InstructionInfo[uInfoIdx].uRegimmOpcode == uRegimmOpcode)
+					{
+						return true;
+					}
+					break;
+				}
+				default:
+					return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 {
 	uAddress = uInstructionAddress;
+
+	unsigned uInfoIdx;
+	if(decodeData(uInstructionData, uInfoIdx))
+	{
+		eType = s_InstructionInfo[uInfoIdx].eType;
+
+		switch(s_InstructionInfo[uInfoIdx].eFormat)
+		{
+			default:
+				M_ASSERT(false);
+		}
+
+		return true;
+	}
 
 	unsigned uOpcode = uInstructionData >> 26;
 
@@ -225,29 +283,6 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 			}
 			break;
 		}
-		case 0x01: /* REGIMM instructions */
-		{
-			unsigned uRegimmOpcode = (uInstructionData >> 16) & 0x1F;
-
-			switch(uRegimmOpcode)
-			{
-				case 0x00:
-					decodeRSSI(uInstructionData);
-					eType = IT_BLTZ;
-					uJumpAddress = uAddress + 4 + (iSI << 2);
-					break;
-				default:
-				{
-					unsigned uOp1 = uRegimmOpcode >> 3;
-					unsigned uOp2 = uRegimmOpcode & 7;
-
-					M_ASSERT(false);
-					printf("Unkown REGIMMOPCODE: 0x%08X (I-Data: 0x%08X)\n", uRegimmOpcode, uInstructionData);
-					return false;
-				}
-			}
-			break;
-		}
 		case 0x02:
 			decodeNOARG();
 			eType = IT_J;
@@ -263,10 +298,10 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 			eType = IT_BNE;
 			uJumpAddress = uAddress + 4 + (iSI << 2);
 			break;
-		case 0x09:
+		/*case 0x09:
 			decodeRSRTSI(uInstructionData);
 			eType = IT_ADDIU;
-			break;
+			break;*/
 		case 0x0A:
 			decodeRSRTSI(uInstructionData);
 			eType = IT_SLTI;
@@ -275,10 +310,10 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 			decodeRSRTSI(uInstructionData);
 			eType = IT_SLTIU;
 			break;
-		case 0x0C:
+		/*case 0x0C:
 			decodeRSRTUI(uInstructionData);
 			eType = IT_ANDI;
-			break;
+			break;*/
 		case 0x0D:
 			// CHECKME: signed or not?
 			decodeRSRTUI(uInstructionData);
