@@ -79,7 +79,7 @@ endif
 cflags-y			+= -I $(TOPDIR)/include/asm/gcc
 cflags-y			+= -G 0 -mno-abicalls -fno-pic -pipe
 cflags-y			+= $(call cc-option, -finline-limit=100000)
-LDFLAGS_vmlinux			+= -G 0 -static -n
+LDFLAGS_vmlinux			+= -G 0 -static -n -nostdlib
 MODFLAGS			+= -mlong-calls
 
 cflags-$(CONFIG_SB1XXX_CORELIS)	+= $(call cc-option,-mno-sched-prolog) \
@@ -325,6 +325,7 @@ load-$(CONFIG_MIPS_XXS1500)	+= 0xffffffff80100000
 # Cobalt Server
 #
 core-$(CONFIG_MIPS_COBALT)	+= arch/mips/cobalt/
+cflags-$(CONFIG_MIPS_COBALT)	+= -Iinclude/asm-mips/cobalt
 load-$(CONFIG_MIPS_COBALT)	+= 0xffffffff80080000
 
 #
