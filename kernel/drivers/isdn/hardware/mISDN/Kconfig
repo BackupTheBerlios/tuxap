@@ -35,6 +35,13 @@ config MISDN_HFCPCI
 	  Enable support for card with Cologne Chips Design HFC PCI based
 	  cards.
 
+config MISDN_HFCUSB
+	bool "Support for HFC USB cards"
+	depends on USB
+	help
+	  Enable support for card with Cologne Chips Design HFC USB based
+	  cards.
+
 config MISDN_HFCMULTI
 	bool "Support for HFC multiport cards (HFC-4S/8S/E1)"
 	depends on PCI
