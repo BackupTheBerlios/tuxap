@@ -85,7 +85,15 @@ LINK32=xilink6.exe
 # PROP Default_Filter "cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 # Begin Source File
 
+SOURCE=..\instruction.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=..\mipsdec.cpp
+# End Source File
+# Begin Source File
+
+SOURCE=..\register.cpp
 # End Source File
 # Begin Source File
 
@@ -95,6 +103,18 @@ SOURCE=..\symbols.cpp
 # Begin Group "Header Files"
 
 # PROP Default_Filter "h;hpp;hxx;hm;inl"
+# Begin Source File
+
+SOURCE=..\common.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\instruction.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\register.h
+# End Source File
 # Begin Source File
 
 SOURCE=..\symbols.h
