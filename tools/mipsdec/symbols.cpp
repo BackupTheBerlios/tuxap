@@ -68,6 +68,22 @@ bool Symbols::lookup(const std::string &strSymName, unsigned &uSymIdx)
 	return false;
 }
 
+bool Symbols::lookup(unsigned uAddress, unsigned &uSymIdx)
+{
+	unsigned uNumSymbols = m_collSymbolList.size();
+
+	for(unsigned uIdx = 0; uIdx < uNumSymbols; uIdx++)
+	{
+		if(m_collSymbolList[uIdx].uAddress == uAddress)
+		{
+			uSymIdx = uIdx;
+			return true;
+		}
+	}
+	
+	return false;
+}
+
 unsigned Symbols::getCount(void)
 {
 	return m_collSymbolList.size();

@@ -35,6 +35,13 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 		bool bBranchAllowed = false;
 		const Instruction aInstruction = collInstList[uInstructionIdx];
 
+		//fprintf(pDestFile, "%08X:\n", aInstruction.uAddress);
+
+		if(aInstruction.bIsJumpTarget)
+		{
+			fprintf(pDestFile, "LABEL_%08X:\n", aInstruction.uAddress);
+		}
+
 		switch(aInstruction.eType)
 		{
 			case IT_ADDIU:
@@ -102,12 +109,28 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				bBranchAllowed = true;
 				break;
 			}
+			case IT_J:
+			{
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "goto LABEL_%08X;\n", aInstruction.uJumpAddress);
+				break;
+			}
 			case IT_JALR:
 			{
 				fprintf(pDestFile, "\n");
 				doIndent(pDestFile, uDepth);
 				M_ASSERT(aInstruction.eRD == R_RA);
-				fprintf(pDestFile, "call FUNCTION in %s;\n\n", getRegVarName(aInstruction.eRS).c_str());
+
+				unsigned uValue;
+				unsigned uSymIdx;
+				if((resolveRegisterValue(collInstList, uInstructionIdx, aInstruction.eRS, uValue)) && (Symbols::lookup(uValue, uSymIdx)))
+				{
+					fprintf(pDestFile, "call FUNCTION %s;\n\n", Symbols::get(uSymIdx)->strName.c_str());									
+				}
+				else
+				{
+					fprintf(pDestFile, "call UNKNOWN FUNCTION in %s;\n\n", getRegVarName(aInstruction.eRS).c_str());
+				}
 				break;
 			}
 			case IT_LUI:
@@ -177,7 +200,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				break;
 			default:
 				doIndent(pDestFile, uDepth);
-				fprintf(pDestFile, "%/* TODO: %s */\n", getInstrName(aInstruction));
+				fprintf(pDestFile, "/* TODO: %s */\n", getInstrName(aInstruction));
 				break;
 		}
 

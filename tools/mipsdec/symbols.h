@@ -17,6 +17,7 @@ class Symbols
 public:
 	static bool parseSymFile(const std::string &strSymFile);
 	static bool lookup(const std::string &strSymName, unsigned &uSymIdx);
+	static bool lookup(unsigned uAddress, unsigned &uSymIdx);
 	static unsigned getCount(void);
 	static const tSymbolEntry *get(unsigned uSymIdx);
 

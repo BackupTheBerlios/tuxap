@@ -22,7 +22,7 @@ bool resolveDelaySlots(tInstList &collInstList)
 					itCurr->bDelaySlotReordered = true;
 
 					M_ASSERT((itCurr + 1) < itEnd);
-					itCurr->swap(*(itCurr + 1));
+					itCurr->swap(*(itCurr + 1), false);
 
 					itCurr = collInstList.begin();
 					itEnd = collInstList.end();
@@ -40,10 +40,10 @@ bool resolveDelaySlots(tInstList &collInstList)
 
 					/* Close if branch using the original jump address */
 					Instruction aInstruction;
-					aInstruction.encodeAbsoluteJump();
+					aInstruction.encodeAbsoluteJump(itCurr->uJumpAddress);
 					itCurr->collIfBranch.push_back(aInstruction);
 
-					itCurr->swap(*(itCurr + 1));
+					itCurr->swap(*(itCurr + 1), false);
 
 					itCurr = collInstList.begin();
 					itEnd = collInstList.end();
@@ -62,7 +62,7 @@ bool resolveDelaySlots(tInstList &collInstList)
 
 					/* Close if branch using the original jump address */
 					Instruction aInstruction;
-					aInstruction.encodeAbsoluteJump();
+					aInstruction.encodeAbsoluteJump(itCurr->uJumpAddress);
 					itCurr->collIfBranch.push_back(aInstruction);
 
 					itCurr = collInstList.begin();

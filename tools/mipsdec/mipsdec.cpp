@@ -4,6 +4,13 @@
 #include "optimize.h"
 #include "common.h"
 
+#ifndef _WIN32
+void __doFail(const char *pCondition, const char *pFile, const char *pFunction, unsigned int uLine)
+{
+	printf("Assertion (%s) failed in file: %s, function: %s, line %d\n", pCondition, pFile, pFunction, uLine);
+}
+#endif
+
 int main(int argc, char **argv)
 {
 	if(argc != 4)
@@ -29,12 +36,15 @@ int main(int argc, char **argv)
 	//dumpInstructions(collInstList);
 	optimizeInstructions(collInstList);
 	//dumpInstructions(collInstList);
+	updateJumpTargets(collInstList);
 	generateCode(stdout, collInstList);
 
+#ifdef _WIN32
 	while(1)
 	{
 //		Sleep(100);
 	}
-	
+#endif
+
 	return 0;
 }

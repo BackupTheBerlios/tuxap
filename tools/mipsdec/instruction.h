@@ -15,7 +15,6 @@ typedef enum {
 	IF_RSRTUI,
 	IF_RTUI,
 	IF_RSRD,
-	IF_UA,
 	IF_RS,
 	IF_RTRDSEL,
 } tInstructionFormat;
@@ -60,9 +59,9 @@ public:
 	{
 	}
 
-	void encodeAbsoluteJump(void);
-	void swap(Instruction &aOtherInstruction);
-	bool parse(unsigned uInstructionData, unsigned uAddress);
+	void encodeAbsoluteJump(unsigned uAddress);
+	void swap(Instruction &aOtherInstruction, bool bSwapAddress);
+	bool parse(unsigned uInstructionData, unsigned uInstructionAddress);
 
 	unsigned uAddress;
 	tInstructionType eType;
@@ -72,18 +71,18 @@ public:
 	tRegister eRD;
 	unsigned short uUI;
 	signed short iSI;
-	unsigned int uUA;
 	unsigned char uSEL;
+	unsigned int uJumpAddress;
 
 	tInstList collIfBranch;
 	tInstList collElseBranch;
 
 	bool bDelaySlotReordered;
+	bool bIsJumpTarget;
 	
 private:
 	void setDefaults(void);
 	void decodeNOARG(void);
-	void decodeUA(unsigned uInstructionData);
 	void decodeRTRDSEL(unsigned uInstructionData);
 	void decodeRTUI(unsigned uInstructionData);
 	void decodeRSRTRD(unsigned uInstructionData);
@@ -95,6 +94,8 @@ private:
 };
 
 bool parseFunction(const std::string &strFuncName, const std::string &strBinFile, tInstList &collInstList);
+void updateJumpTargets(tInstList &collInstList);
+bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tRegister eRegister, unsigned &uRegisterVal);
 void dumpInstructions(const tInstList &collInstList);
 const char *getInstrName(const Instruction &aInstruction);
 

@@ -8,25 +8,35 @@ static unsigned calcSymFileOffset(unsigned uSymAddress)
 	return uSymAddress - 0x80000000;
 }
 
-void Instruction::encodeAbsoluteJump(void)
+void Instruction::encodeAbsoluteJump(unsigned uJAddress)
 {
+	M_ASSERT(uJAddress != 0);
+
 	setDefaults();
+	uAddress = 0xFFFFFFFF;
 	eType = IT_J;
-	eFormat = IF_UA;
+	eFormat = IF_NOARG;
+	uJumpAddress = uJAddress;
 	bDelaySlotReordered = true;
-	//M_ASSERT(false); // FIXME: Complete!
 }
 
-void Instruction::swap(Instruction &aOtherInstruction)
+void Instruction::swap(Instruction &aOtherInstruction, bool bSwapAddress)
 {
 	Instruction aInstructionTmp = aOtherInstruction;
 	aOtherInstruction = *this;
 	*this = aInstructionTmp;
+	
+	if(!bSwapAddress)
+	{
+		unsigned uTmpAddress = uAddress;
+		uAddress = aOtherInstruction.uAddress;
+		aOtherInstruction.uAddress = uTmpAddress;
+	}
 }
 
-bool Instruction::parse(unsigned uInstructionData, unsigned uAddress)
+bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 {
-	uAddress = uAddress;
+	uAddress = uInstructionAddress;
 
 	if(uAddress == 0x8016bb64)
 	{
@@ -127,6 +137,7 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uAddress)
 				case 0x00:
 					decodeRSSI(uInstructionData);
 					eType = IT_BLTZ;
+					uJumpAddress = uAddress + 4 + (iSI << 2);
 					break;
 				default:
 				{
@@ -141,16 +152,19 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uAddress)
 			break;
 		}
 		case 0x02:
-			decodeUA(uInstructionData);
+			decodeNOARG();
 			eType = IT_J;
+			uJumpAddress = ((uAddress + 4) & ~0xFFFFFFF) | ((uInstructionData & 0x3FFFFFF) << 2);
 			break;
 		case 0x04:
 			decodeRSRTSI(uInstructionData);
 			eType = IT_BEQ;
+			uJumpAddress = uAddress + 4 + (iSI << 2);
 			break;
 		case 0x05:
 			decodeRSRTSI(uInstructionData);
 			eType = IT_BNE;
+			uJumpAddress = uAddress + 4 + (iSI << 2);
 			break;
 		case 0x09:
 			decodeRSRTSI(uInstructionData);
@@ -208,6 +222,7 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uAddress)
 		case 0x15:
 			decodeRSRTSI(uInstructionData);
 			eType = IT_BNEL;
+			uJumpAddress = uAddress + 4 + (iSI << 2);
 			break;
 		case 0x23:
 			decodeRSRTSI(uInstructionData);
@@ -239,24 +254,18 @@ void Instruction::setDefaults(void)
 	eRD = R_UNKNOWN;
 	uUI = 0;
 	iSI = 0;
-	uUA = 0;
 	uSEL = 0;
 	bDelaySlotReordered = false;
 	collIfBranch.clear();
 	collElseBranch.clear();
+	uJumpAddress = 0;
+	bIsJumpTarget = false;
 }
 
 void Instruction::decodeNOARG(void)
 {
 	setDefaults();
 	eFormat = IF_NOARG;
-}
-
-void Instruction::decodeUA(unsigned uInstructionData)
-{
-	setDefaults();
-	eFormat = IF_UA;
-	uUA = uInstructionData & 0x3FFFFFF;
 }
 
 void Instruction::decodeRTRDSEL(unsigned uInstructionData)
@@ -393,6 +402,107 @@ bool parseFunction(const std::string &strFuncName, const std::string &strBinFile
 	return true;
 }
 
+static bool isJumpTarget(const tInstList &collInstList, unsigned uAddress)
+{
+	unsigned uInstructionCount = collInstList.size();
+
+	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
+	{
+		if(collInstList[uInstructionIdx].uJumpAddress == uAddress)
+		{
+			return true;
+		}
+
+		if(isJumpTarget(collInstList[uInstructionIdx].collIfBranch, uAddress))
+		{
+			return true;
+		}
+
+		if(isJumpTarget(collInstList[uInstructionIdx].collElseBranch, uAddress))
+		{
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+void updateJumpTargets(tInstList &collInstList)
+{
+	unsigned uInstructionCount = collInstList.size();
+
+	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
+	{
+		collInstList[uInstructionIdx].bIsJumpTarget = isJumpTarget(collInstList, collInstList[uInstructionIdx].uAddress);
+
+		updateJumpTargets(collInstList[uInstructionIdx].collIfBranch);
+		updateJumpTargets(collInstList[uInstructionIdx].collElseBranch);
+	}
+}
+
+bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tRegister eRegister, unsigned &uRegisterVal)
+{
+	bool bGotAbsoluteVal = false;
+	unsigned uPos = uInstIdx;
+
+	do
+	{
+		switch(collInstList[uPos].eType)
+		{
+			case IT_LUI:
+				if(collInstList[uPos].eRT == eRegister)
+				{
+					uRegisterVal = collInstList[uPos].uUI << 16;
+					bGotAbsoluteVal = true;
+				}
+				break;		
+		}
+
+		if(!bGotAbsoluteVal)
+		{
+			uPos--;
+		}
+	}
+	while((!bGotAbsoluteVal) && (uPos > 0));
+	
+	if(!bGotAbsoluteVal)
+	{
+		return false;
+	}
+	
+	/* Skip absolute set instruction */
+	uPos++;
+
+	while(uPos < uInstIdx)
+	{
+		const Instruction *pInstruction = &collInstList[uPos];
+
+		switch(collInstList[uPos].eType)
+		{
+			case IT_ADDIU:
+				if(collInstList[uPos].eRT == eRegister)
+				{
+					M_ASSERT(collInstList[uPos].eRS == eRegister);
+					uRegisterVal += collInstList[uPos].iSI;
+				}
+				break;
+			case IT_ADDU:
+				M_ASSERT(collInstList[uPos].eRD != eRegister);
+				break;
+			default:
+			{
+				return false;
+				M_ASSERT(false);
+				break;
+			}
+		}
+
+		uPos++;
+	}
+	
+	return true;
+}
+
 const char *getInstrName(const Instruction &aInstruction)
 {
 	switch(aInstruction.eType)
@@ -497,10 +607,6 @@ void dumpInstructions(const tInstList &collInstList)
 				break;
 			case IF_RSRTSI:
 				sprintf(pBuf, "\t%s,%s,%d", getRegName(collInstList[uInstructionIdx].eRS), getRegName(collInstList[uInstructionIdx].eRT), collInstList[uInstructionIdx].iSI);
-				strArg = pBuf;
-				break;
-			case IF_UA:
-				sprintf(pBuf, "\t0x%X", collInstList[uInstructionIdx].uUA);
 				strArg = pBuf;
 				break;
 			case IF_RS:

@@ -7,7 +7,8 @@
 #define M_ASSERT(x) assert(x)
 #pragma warning(disable : 4996)
 #else
-#define M_ASSERT(x) if(!(x)) printf("Assertion (%s) failed in file: %s, function: %s, line %d\n", #x, __FILE__, __FUNCTION__, __LINE__)
+void __doFail(const char *pCondition, const char *pFile, const char *pFunction, unsigned int uLine);
+#define M_ASSERT(x) if(!(x)) __doFail(#x, __FILE__, __FUNCTION__, __LINE__)
 #endif
 
 #endif
