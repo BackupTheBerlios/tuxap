@@ -148,6 +148,12 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 					fprintf(pDestFile, "%s = %s | 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.uUI);
 				}
 				break;
+			case IT_SLTIU:
+			{
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "%s = (%s < %d) ? 1 : 0;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.iSI);
+				break;
+			}
 			case IT_SSNOP:
 				/* Ignore */
 				break;
