@@ -57,8 +57,6 @@ const char *getRegName(tRegister eRegister)
 			return "a3";
 		case R_AT:
 			return "at";
-		case R_AT_DSB:
-			return "at_DSB";
 		case R_GP:
 			return "gp";
 		case R_RA:
@@ -75,8 +73,6 @@ const char *getRegName(tRegister eRegister)
 			return "sp";
 		case R_V0:
 			return "v0";
-		case R_V0_DSB:
-			return "v0_DSB";
 		case R_V1:
 			return "v1";
 		case R_UNKNOWN:
@@ -85,19 +81,5 @@ const char *getRegName(tRegister eRegister)
 		default:
 			M_ASSERT(false);
 			return "<DEF>";
-	}
-}
-
-tRegister getDSBRegister(tRegister aRegister)
-{
-	switch(aRegister)
-	{
-		case R_AT:
-			return R_AT_DSB;
-		case R_V0:
-			return R_V0_DSB;
-		default:
-			M_ASSERT(false);
-			return R_UNKNOWN;
 	}
 }

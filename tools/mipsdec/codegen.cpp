@@ -96,6 +96,19 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				}
 				break;
 			}
+			case IT_ANDI:
+			{
+				doIndent(pDestFile, uDepth);
+				if(aInstruction.eRT == aInstruction.eRS)
+				{
+					fprintf(pDestFile, "%s &= 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), aInstruction.uUI);
+				}
+				else
+				{
+					fprintf(pDestFile, "%s = %s & 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.uUI);
+				}
+				break;
+			}
 			case IT_BEQ:
 			case IT_BEQL:
 			{
@@ -144,7 +157,19 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				{
 					fprintf(pDestFile, "call UNKNOWN FUNCTION in %s (0x%08X);\n\n", getRegVarName(aInstruction.eRS).c_str(), uValue);
 				}
-				bBranchAllowed = true;
+				break;
+			}
+			case IT_JR:
+			{
+				doIndent(pDestFile, uDepth);
+				if(aInstruction.eRS == R_RA)
+				{
+					fprintf(pDestFile, "return %s;\n", getRegVarName(R_V0).c_str());
+				}
+				else
+				{
+					M_ASSERT(false);
+				}
 				break;
 			}
 			case IT_LUI:
@@ -201,6 +226,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 					fprintf(pDestFile, "%s = %s | 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.uUI);
 				}
 				break;
+			case IT_SLTI:
 			case IT_SLTIU:
 			{
 				doIndent(pDestFile, uDepth);
@@ -259,14 +285,16 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 			}
 			else
 			{
-				//M_ASSERT(false);
+				M_ASSERT(false);
 			}
 		}
 	}
 }
 
-void generateCode(FILE *pDestFile, const tInstList &collInstList)
+void generateCode(FILE *pDestFile, const std::string &strFunctionName, const tInstList &collInstList)
 {
+	fprintf(pDestFile, "#include \"mipsdec_helper.h\"\n\n");
+	fprintf(pDestFile, "void %s(void)\n", strFunctionName.c_str());
 	fprintf(pDestFile, "{\n");
 	generateInstructionCode(pDestFile, collInstList, 1);
 	fprintf(pDestFile, "}\n");

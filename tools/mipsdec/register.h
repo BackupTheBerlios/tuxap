@@ -8,7 +8,6 @@ typedef enum {
 	R_A2,
 	R_A3,
 	R_AT,
-	R_AT_DSB,
 	R_GP,
 	R_RA,
 	R_S0,
@@ -17,13 +16,11 @@ typedef enum {
 	R_S3,
 	R_SP,
 	R_V0,
-	R_V0_DSB,
 	R_V1,
 	R_UNKNOWN,
 } tRegister;
 
 tRegister decodeRegister(unsigned uRawData);
 const char *getRegName(tRegister eRegister);
-tRegister getDSBRegister(tRegister aRegister);
 
 #endif

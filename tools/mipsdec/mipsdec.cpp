@@ -34,13 +34,18 @@ int main(int argc, char **argv)
 	//dumpInstructions(collInstList);
 	resolveDelaySlots(collInstList);
 	//dumpInstructions(collInstList);
-	optimizeInstructions(collInstList);
-	//dumpInstructions(collInstList);
+
+	do {
+		updateJumpTargets(collInstList);
+		//dumpInstructions(collInstList);
+	} 
+	while(optimizeInstructions(collInstList));
+
 	updateJumpTargets(collInstList);
-	dumpInstructions(collInstList);
+	//dumpInstructions(collInstList);
 
 	FILE *pCodeFile = fopen("code.c", "w");
-	generateCode(pCodeFile, collInstList);
+	generateCode(pCodeFile, strFunction, collInstList);
 	fclose(pCodeFile);
 
 	return 0;
