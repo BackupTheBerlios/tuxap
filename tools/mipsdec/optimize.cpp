@@ -209,12 +209,71 @@ static bool reassembleSingleJumpBlocks(tInstList &collInstList)
 	return false;
 }
 
+/* Try to detect else branches and move code there to get rid of some  */
+/* jumps. This will also remove the jump instruction at the end of the */
+/* if branch if the jump target directly follows the if branch         */
+/* Preconditions:                                                      */
+/* - Last instruction in the if branch is an absolute jump instruction */
+/* - No else branch                                                    */
+/* - No instruction in the block is a jump target                      */
+static bool detectElseBranch(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		/* Do we have an if branch and no else branch? */
+		if((itCurr->collIfBranch.size() > 0) && (itCurr->collElseBranch.size() == 0))
+		{
+			tInstList::reverse_iterator itJumpInstruction = itCurr->collIfBranch.rbegin();
+
+			/* Last if branch instruction a jump instruction? */
+			if(itJumpInstruction->eType == IT_J)
+			{
+				tInstList::iterator itBlockBegin = itCurr + 1;
+				tInstList::iterator itBlockEnd = itCurr + 1;
+
+				while(itBlockEnd != itEnd)
+				{
+					if(itBlockEnd->uAddress == itJumpInstruction->uJumpAddress)
+					{
+						/* Remove jump from if branch */
+						itCurr->collIfBranch.pop_back();
+
+						/* Move block into else branch */
+						itCurr->collElseBranch.insert(itCurr->collElseBranch.begin(), itBlockBegin, itBlockEnd);
+						collInstList.erase(itBlockBegin, itBlockEnd);
+						return true;
+					}
+
+					/* No jump targets allowed */
+					if(itBlockEnd->bIsJumpTarget)
+					{
+						break;
+					}
+
+					itBlockEnd++;
+				}
+			}
+		}
+		itCurr++;
+	}
+
+	return false;
+}
+
 bool optimizeInstructions(tInstList &collInstList)
 {
 	if(reassembleSingleJumpBlocks(collInstList))
 	{
 		return true;
 	}
-
+	
+	if(detectElseBranch(collInstList))
+	{
+		return true;
+	}
+	
 	return false;
 }
