@@ -521,7 +521,7 @@ static bool isJumpTarget(const tInstList &collInstList, unsigned uAddress)
 
 	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
 	{
-		if(collInstList[uInstructionIdx].uJumpAddress == uAddress)
+		if((collInstList[uInstructionIdx].uJumpAddress == uAddress) && (!collInstList[uInstructionIdx].bIgnoreJump))
 		{
 			return true;
 		}
