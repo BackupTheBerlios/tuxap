@@ -3,6 +3,22 @@
 #include "common.h"
 #include "symbols.h"
 
+typedef struct
+{
+	tInstructionType eType;
+	tInstructionFormat eFormart;
+	tRegister eResultRegister;
+	tInstructionDelaySlot eDelaySlot;
+} tInstructionInfo;
+
+#define DECLARE_OPCODE(type, format, res_reg, delayslot) {type, format, res_reg, delayslot}
+
+static tInstructionInfo s_InstructionInfo[] = 
+{
+	DECLARE_OPCODE(IT_J, IF_NOARG, R_UNKNOWN, IDS_UNCONDITIONAL),
+	DECLARE_OPCODE(IT_J, IF_NOARG, R_UNKNOWN, IDS_UNCONDITIONAL),
+};
+
 static unsigned calcSymFileOffset(unsigned uSymAddress)
 {
 	return uSymAddress - 0x80000000;
@@ -37,11 +53,6 @@ void Instruction::swap(Instruction &aOtherInstruction, bool bSwapAddress)
 bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 {
 	uAddress = uInstructionAddress;
-
-	if(uAddress == 0x8016bb64)
-	{
-		int i = 1;
-	}
 
 	unsigned uOpcode = uInstructionData >> 26;
 
@@ -81,6 +92,10 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 					}
 					break;
 				}
+				case 0x03:
+					decodeRTRDSA(uInstructionData);
+					eType = IT_SRA;
+					break;
 				case 0x08:
 					decodeRS(uInstructionData);
 					if(uInstructionData & (1 << 10))
@@ -103,9 +118,21 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 						eType = IT_JALR;
 					}
 					break;
+				case 0x10:
+					decodeRD(uInstructionData);
+					eType = IT_MFHI;
+					break;
+				case 0x18:
+					decodeRSRT(uInstructionData);
+					eType = IT_MULT;
+					break;
 				case 0x21:
 					decodeRSRTRD(uInstructionData);
 					eType = IT_ADDU;
+					break;
+				case 0x23:
+					decodeRSRTRD(uInstructionData);
+					eType = IT_SUBU;
 					break;
 				case 0x24:
 					decodeRSRTRD(uInstructionData);
@@ -114,6 +141,10 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 				case 0x25:
 					decodeRSRTRD(uInstructionData);
 					eType = IT_OR;
+					break;
+				case 0x2B:
+					decodeRSRTRD(uInstructionData);
+					eType = IT_SLTU;
 					break;
 				default:
 				{
@@ -221,18 +252,59 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 			}
 			break;
 		}
+		case 0x14:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_BEQL;
+			uJumpAddress = uAddress + 4 + (iSI << 2);
+			break;
 		case 0x15:
 			decodeRSRTSI(uInstructionData);
 			eType = IT_BNEL;
 			uJumpAddress = uAddress + 4 + (iSI << 2);
 			break;
+		case 0x21:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_LH;
+			break;
+		case 0x22:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_LWL;
+			break;
 		case 0x23:
 			decodeRSRTSI(uInstructionData);
 			eType = IT_LW;
 			break;
+		case 0x24:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_LBU;
+			break;
+		case 0x25:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_LHU;
+			break;
+		case 0x26:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_LWR;
+			break;
+		case 0x28:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_SB;
+			break;
+		case 0x29:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_SH;
+			break;
+		case 0x2A:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_SWL;
+			break;
 		case 0x2B:
 			decodeRSRTSI(uInstructionData);
 			eType = IT_SW;
+			break;
+		case 0x2E:
+			decodeRSRTSI(uInstructionData);
+			eType = IT_SWR;
 			break;
 		default:
 		{
@@ -256,7 +328,19 @@ bool Instruction::modifiesRegister(tRegister eRegister) const
 			return eRT == eRegister;
 		case IT_ADDU:
 			return eRD == eRegister;
+		case IT_LW:
+			return eRT == eRegister;
 		case IT_NOP:
+			return false;
+		case IT_ORI:
+			return eRT == eRegister;
+		case IT_SLTI:
+			return eRT == eRegister;
+		case IT_SB:
+			return false;
+		case IT_SUBU:
+			return eRD == eRegister;
+		case IT_SW:
 			return false;
 		default:
 			M_ASSERT(false);
@@ -300,6 +384,15 @@ void Instruction::decodeNOARG(void)
 	eFormat = IF_NOARG;
 }
 
+void Instruction::decodeRTRDSA(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RTRDSA;
+	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
+	eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
+	uSA = (uInstructionData >> 6) & 0x1F;
+}
+
 void Instruction::decodeRTRDSEL(unsigned uInstructionData)
 {
 	setDefaults();
@@ -334,6 +427,14 @@ void Instruction::decodeRSRD(unsigned uInstructionData)
 	eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
 }
 
+void Instruction::decodeRSRT(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RSRT;
+	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
+	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
+}
+
 void Instruction::decodeRSRTSI(unsigned uInstructionData)
 {
 	setDefaults();
@@ -358,6 +459,13 @@ void Instruction::decodeRSRTUI(unsigned uInstructionData)
 	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
 	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
 	uUI = uInstructionData & 0xFFFF;
+}
+
+void Instruction::decodeRD(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RD;
+	eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
 }
 
 void Instruction::decodeRS(unsigned uInstructionData)
@@ -575,6 +683,8 @@ const char *getInstrName(const Instruction &aInstruction)
 			return "andi";
 		case IT_BEQ:
 			return "beq";
+		case IT_BEQL:
+			return "beql";
 		case IT_BLTZ:
 			return "bltz";
 		case IT_BNE:
@@ -591,30 +701,58 @@ const char *getInstrName(const Instruction &aInstruction)
 			return "jr";
 		case IT_JR_HB:
 			return "jr.hb";
+		case IT_LBU:
+			return "lbu";
+		case IT_LH:
+			return "lh";
+		case IT_LHU:
+			return "lhu";
 		case IT_LUI:
 			return "lui";
 		case IT_LW:
 			return "lw";
+		case IT_LWL:
+			return "lwl";
+		case IT_LWR:
+			return "lwr";
 		case IT_MFC0:
 			return "mfc0";
+		case IT_MFHI:
+			return "mfhi";
 		case IT_MTC0:
 			return "mtc0";
+		case IT_MULT:
+			return "mult";
 		case IT_NOP:
 			return "nop";
 		case IT_OR:
 			return "or";
 		case IT_ORI:
 			return "ori";
+		case IT_SB:
+			return "sb";
+		case IT_SH:
+			return "sh";
 		case IT_SLL:
 			return "sll";
 		case IT_SLTI:
 			return "slti";
 		case IT_SLTIU:
 			return "sltiu";
+		case IT_SLTU:
+			return "sltu";
+		case IT_SRA:
+			return "sra";
 		case IT_SSNOP:
 			return "ssnop";
+		case IT_SUBU:
+			return "subu";
 		case IT_SW:
 			return "sw";
+		case IT_SWL:
+			return "swl";
+		case IT_SWR:
+			return "swr";
 		case IT_XORI:
 			return "xori";
 		default:

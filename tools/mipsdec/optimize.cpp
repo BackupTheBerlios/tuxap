@@ -70,6 +70,36 @@ bool resolveDelaySlots(tInstList &collInstList)
 
 					itCurr->swap(*(itCurr + 1), false);
 
+					/* If the instruction in the delay slot modifies registers */
+					/* used in the branch instruction we need to keep a backup */
+					/* to handle the branch in the correct way...              */
+					switch((itCurr + 1)->eType)
+					{
+						//case IT_J:
+							/* Jump address not in register */
+						//	break;
+						case IT_BEQ:
+						//case IT_BLTZ:
+						//case IT_BNE:
+							if(itCurr->modifiesRegister((itCurr + 1)->eRS))
+							{
+								Instruction aInstruction;
+								aInstruction.encodeRegisterMove((itCurr + 1)->eRS, getDSBRegister((itCurr + 1)->eRS));
+								(itCurr + 1)->eRS = getDSBRegister((itCurr + 1)->eRS);
+								collInstList.insert(itCurr, aInstruction);
+							}
+							if(itCurr->modifiesRegister((itCurr + 1)->eRT))
+							{
+								Instruction aInstruction;
+								aInstruction.encodeRegisterMove((itCurr + 1)->eRT, getDSBRegister((itCurr + 1)->eRT));
+								(itCurr + 1)->eRT = getDSBRegister((itCurr + 1)->eRT);
+								collInstList.insert(itCurr, aInstruction);
+							}
+							break;
+						//default:
+							//M_ASSERT(false);
+					}
+
 					itCurr = collInstList.begin();
 					itEnd = collInstList.end();
 

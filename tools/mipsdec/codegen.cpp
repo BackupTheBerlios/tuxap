@@ -48,7 +48,11 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 			{
 				doIndent(pDestFile, uDepth);
 				char cSign = aInstruction.iSI < 0 ? '-' : '+';
-				if(aInstruction.eRT == aInstruction.eRS)
+				if(aInstruction.eRS == R_ZERO)
+				{
+					fprintf(pDestFile, "%s = %d;\n", getRegVarName(aInstruction.eRT).c_str(), aInstruction.iSI);
+				}
+				else if(aInstruction.eRT == aInstruction.eRS)
 				{
 					fprintf(pDestFile, "%s %c= %d;\n", getRegVarName(aInstruction.eRT).c_str(), cSign, abs(aInstruction.iSI));
 				}
@@ -61,9 +65,13 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 			case IT_ADDU:
 			{
 				doIndent(pDestFile, uDepth);
-				if((aInstruction.eRS == 0) && (aInstruction.eRT == 0))
+				if((aInstruction.eRS == R_ZERO) && (aInstruction.eRT == R_ZERO))
 				{
 					fprintf(pDestFile, "%s = 0;\n", getRegVarName(aInstruction.eRD).c_str());
+				}
+				else if(aInstruction.eRT == R_ZERO)
+				{
+					fprintf(pDestFile, "%s = %s;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRS).c_str());
 				}
 				else if(aInstruction.eRD == aInstruction.eRS)
 				{
@@ -178,7 +186,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				break;
 			case IT_ORI:
 				doIndent(pDestFile, uDepth);
-				if(aInstruction.eRS == 0)
+				if(aInstruction.eRS == R_ZERO)
 				{
 					fprintf(pDestFile, "%s = 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), aInstruction.uUI);
 				}
@@ -257,7 +265,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 
 void generateCode(FILE *pDestFile, const tInstList &collInstList)
 {
-	printf("{\n");
+	fprintf(pDestFile, "{\n");
 	generateInstructionCode(pDestFile, collInstList, 1);
-	printf("}\n");
+	fprintf(pDestFile, "}\n");
 }

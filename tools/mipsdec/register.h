@@ -17,6 +17,7 @@ typedef enum {
 	R_S3,
 	R_SP,
 	R_V0,
+	R_V0_DSB,
 	R_V1,
 	R_UNKNOWN,
 } tRegister;
