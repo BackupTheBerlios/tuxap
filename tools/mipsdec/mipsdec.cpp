@@ -1,20 +1,32 @@
 #include "symbols.h"
 #include "instruction.h"
+#include "codegen.h"
 #include "common.h"
 
-int main(void)
+int main(int argc, char **argv)
 {
 	tSymList collSymList;
 
-	if(!parseSymFile("System.map", collSymList))
+	if(argc != 4)
+	{
+		printf("Syntax: %s <function> <binary> <map>\n", argv[0]);
+		return 1;
+	}
+
+	std::string strFunction = argv[1];
+	std::string strBinaryFile = argv[2];
+	std::string strMapFile = argv[3];
+
+	if(!parseSymFile(strMapFile, collSymList))
 	{
 		return 0;
 	}
 
 	tInstList collInstList;
 	
-	parseFunction("testfunc", collSymList, "vmlinux", collInstList);
-	dumpInstructions(collInstList);
+	parseFunction(strFunction, collSymList, strBinaryFile, collInstList);
+	//dumpInstructions(collInstList);
+	generateCode(stdout, collInstList);
 
 	while(1)
 	{

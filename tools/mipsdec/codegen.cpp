@@ -1,0 +1,179 @@
+#include "instruction.h"
+#include "common.h"
+
+std::string getIndentStr(unsigned uDepth)
+{
+	std::string strIndent;
+
+	while(uDepth > 0)
+	{
+		strIndent += '\t';
+		uDepth--;
+	}
+
+	return strIndent;
+}
+
+std::string getRegVarName(tRegister eRegister)
+{
+	std::string strVarName = "REG_";
+	strVarName += getRegName(eRegister);
+	return strVarName;
+}
+
+void doIndent(FILE *pDestFile, unsigned uDepth)
+{
+	fprintf(pDestFile, "%s", getIndentStr(uDepth).c_str());
+}
+
+void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, unsigned uDepth)
+{
+	unsigned uInstructionCount = collInstList.size();
+
+	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
+	{
+		bool bBranchAllowed = false;
+		const tInstruction aInstruction = collInstList[uInstructionIdx];
+
+		switch(aInstruction.eType)
+		{
+			case IT_ADDIU:
+			{
+				doIndent(pDestFile, uDepth);
+				char cSign = aInstruction.iSI < 0 ? '-' : '+';
+				if(aInstruction.eRT == aInstruction.eRS)
+				{
+					fprintf(pDestFile, "%s %c= %d;\n", getRegVarName(aInstruction.eRT).c_str(), cSign, abs(aInstruction.iSI));
+				}
+				else
+				{
+					fprintf(pDestFile, "%s = %s %c %d;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI));
+				}
+				break;
+			}
+			case IT_ADDU:
+			{
+				doIndent(pDestFile, uDepth);
+				if(aInstruction.eRD == aInstruction.eRS)
+				{
+					fprintf(pDestFile, "%s += %s;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRT).c_str());
+				}
+				else
+				{
+					fprintf(pDestFile, "%s = %s + %s;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRS).c_str(), getRegVarName(aInstruction.eRT).c_str());
+				}
+				break;
+			}
+			case IT_AND:
+			{
+				doIndent(pDestFile, uDepth);
+				if(aInstruction.eRD == aInstruction.eRS)
+				{
+					fprintf(pDestFile, "%s &= %s;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRT).c_str());
+				}
+				else
+				{
+					fprintf(pDestFile, "%s = %s & %s;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRS).c_str(), getRegVarName(aInstruction.eRT).c_str());
+				}
+				break;
+			}
+			case IT_LUI:
+			{
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "%s = 0x%X0000;\n", getRegVarName(aInstruction.eRT).c_str(), aInstruction.uUI);
+				break;
+			}
+			case IT_LW:
+			{
+				doIndent(pDestFile, uDepth);
+				char cSign = aInstruction.iSI < 0 ? '-' : '+';
+				fprintf(pDestFile, "%s = *((unsigned int *)(((unsigned int)(%s)) %c %d));\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI));
+				break;
+			}
+			case IT_NOP:
+				/* Ignore */
+				break;
+			case IT_OR:
+				doIndent(pDestFile, uDepth);
+				if(aInstruction.eRD == aInstruction.eRS)
+				{
+					fprintf(pDestFile, "%s |= %s;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRT).c_str());
+				}
+				else
+				{
+					fprintf(pDestFile, "%s = %s | %s;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRS).c_str(), getRegVarName(aInstruction.eRT).c_str());
+				}
+				break;
+			case IT_ORI:
+				doIndent(pDestFile, uDepth);
+				if(aInstruction.eRT == aInstruction.eRS)
+				{
+					fprintf(pDestFile, "%s |= 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), aInstruction.uUI);
+				}
+				else
+				{
+					fprintf(pDestFile, "%s = %s | 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.uUI);
+				}
+				break;
+			case IT_SSNOP:
+				/* Ignore */
+				break;
+			case IT_SW:
+			{
+				doIndent(pDestFile, uDepth);
+				char cSign = aInstruction.iSI < 0 ? '-' : '+';
+				fprintf(pDestFile, "*((unsigned int *)(((unsigned int)(%s)) %c %d)) = %s;\n", getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI), getRegVarName(aInstruction.eRT).c_str());
+				break;
+			}
+			case IT_XORI:
+				doIndent(pDestFile, uDepth);
+				if(aInstruction.eRT == aInstruction.eRS)
+				{
+					fprintf(pDestFile, "%s ^= 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), aInstruction.uUI);
+				}
+				else
+				{
+					fprintf(pDestFile, "%s = %s ^ 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.uUI);
+				}
+				break;
+			default:
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "%/* TODO: %s */\n", getInstrName(aInstruction));
+				break;
+		}
+
+		if(!bBranchAllowed)
+		{
+			M_ASSERT(aInstruction.collIfBranch.size() == 0);
+			M_ASSERT(aInstruction.collElseBranch.size() == 0);
+		}
+		else
+		{
+			if(aInstruction.collIfBranch.size() > 0)
+			{
+				fprintf(pDestFile, "%s{\n", getIndentStr(uDepth).c_str());
+				generateInstructionCode(pDestFile, aInstruction.collIfBranch, uDepth + 1);
+				fprintf(pDestFile, "%s}\n", getIndentStr(uDepth).c_str());
+
+				if(aInstruction.collElseBranch.size() > 0)
+				{
+					fprintf(pDestFile, "%selse\n", getIndentStr(uDepth).c_str());
+					fprintf(pDestFile, "%s{\n", getIndentStr(uDepth).c_str());
+					generateInstructionCode(pDestFile, aInstruction.collElseBranch, uDepth + 1);
+					fprintf(pDestFile, "%s}\n", getIndentStr(uDepth).c_str());
+				}
+			}
+			else
+			{
+				M_ASSERT(false);
+			}
+		}
+	}
+}
+
+void generateCode(FILE *pDestFile, const tInstList &collInstList)
+{
+	printf("{\n");
+	generateInstructionCode(pDestFile, collInstList, 1);
+	printf("}\n");
+}

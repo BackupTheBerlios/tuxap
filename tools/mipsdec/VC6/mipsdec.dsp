@@ -85,6 +85,10 @@ LINK32=xilink6.exe
 # PROP Default_Filter "cpp;c;cxx;rc;def;r;odl;idl;hpj;bat"
 # Begin Source File
 
+SOURCE=..\codegen.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=..\instruction.cpp
 # End Source File
 # Begin Source File
@@ -103,6 +107,10 @@ SOURCE=..\symbols.cpp
 # Begin Group "Header Files"
 
 # PROP Default_Filter "h;hpp;hxx;hm;inl"
+# Begin Source File
+
+SOURCE=..\codegen.h
+# End Source File
 # Begin Source File
 
 SOURCE=..\common.h
