@@ -94,7 +94,7 @@ private:
 	void decodeRS(unsigned uInstructionData);
 };
 
-bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, const std::string &strBinFile, tInstList &collInstList);
+bool parseFunction(const std::string &strFuncName, const std::string &strBinFile, tInstList &collInstList);
 void dumpInstructions(const tInstList &collInstList);
 const char *getInstrName(const Instruction &aInstruction);
 

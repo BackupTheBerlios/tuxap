@@ -6,8 +6,6 @@
 
 int main(int argc, char **argv)
 {
-	tSymList collSymList;
-
 	if(argc != 4)
 	{
 		printf("Syntax: %s <function> <binary> <map>\n", argv[0]);
@@ -18,14 +16,14 @@ int main(int argc, char **argv)
 	std::string strBinaryFile = argv[2];
 	std::string strMapFile = argv[3];
 
-	if(!parseSymFile(strMapFile, collSymList))
+	if(!Symbols::parseSymFile(strMapFile))
 	{
 		return 0;
 	}
 
 	tInstList collInstList;
 	
-	parseFunction(strFunction, collSymList, strBinaryFile, collInstList);
+	parseFunction(strFunction, strBinaryFile, collInstList);
 	//dumpInstructions(collInstList);
 	resolveDelaySlots(collInstList);
 	//dumpInstructions(collInstList);

@@ -326,11 +326,11 @@ void Instruction::decodeRS(unsigned uInstructionData)
 	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
 }
 
-bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, const std::string &strBinFile, tInstList &collInstList)
+bool parseFunction(const std::string &strFuncName, const std::string &strBinFile, tInstList &collInstList)
 {
 	unsigned uSymIdx;
 
-	if(!lookupSymbol(strFuncName, collSymList, uSymIdx))
+	if(!Symbols::lookup(strFuncName, uSymIdx))
 	{
 		printf("Unable to locate function %s\n", strFuncName.c_str());
 		return false;
@@ -338,12 +338,13 @@ bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, 
 
 	unsigned uInstructionCount;
 
-	if((uSymIdx + 1) == collSymList.size())
+	if((uSymIdx + 1) == Symbols::getCount())
 	{
+		M_ASSERT(false); // FIXME: TODO
 	}
 	else
 	{
-		uInstructionCount = (collSymList[uSymIdx + 1].uAddress - collSymList[uSymIdx].uAddress) / 4;
+		uInstructionCount = (Symbols::get(uSymIdx + 1)->uAddress - Symbols::get(uSymIdx)->uAddress) / 4;
 	}
 	
 	FILE *pBinFile = fopen(strBinFile.c_str(), "rb");
@@ -354,23 +355,30 @@ bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, 
 		return false;
 	}
 	
-	fseek(pBinFile, calcSymFileOffset(collSymList[uSymIdx].uAddress), SEEK_SET);
+	fseek(pBinFile, calcSymFileOffset(Symbols::get(uSymIdx)->uAddress), SEEK_SET);
 	
 	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
 	{
-		unsigned uData;
-		
-		if(fread(&uData, 1, sizeof(uData), pBinFile) != sizeof(uData))
+		unsigned uData = 0;
+
+		for(unsigned uByteIdx = 0; uByteIdx < sizeof(uData); uByteIdx++)
 		{
-			printf("Short binary file read!\n");
-			return false;
+			unsigned char uByte;
+
+			if(fread(&uByte, 1, sizeof(uByte), pBinFile) != sizeof(uByte))
+			{
+				printf("Short binary file read!\n");
+				return false;
+			}
+			
+			uData = (uData >> 8) | (uByte << 24);
 		}
 		
 		Instruction aInstruction;
 
 		aInstruction.eFormat = IF_UNKNOWN;
 
-		if(!aInstruction.parse(uData, collSymList[uSymIdx].uAddress + (4 * uInstructionIdx)))
+		if(!aInstruction.parse(uData, Symbols::get(uSymIdx)->uAddress + (4 * uInstructionIdx)))
 		{
 			return false;
 		}

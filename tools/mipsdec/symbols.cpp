@@ -1,9 +1,11 @@
 #include "symbols.h"
 #include "common.h"
 
-bool parseSymFile(const std::string &strSymFile, tSymList &collSymList)
+tSymList Symbols::m_collSymbolList;
+
+bool Symbols::parseSymFile(const std::string &strSymFile)
 {
-	collSymList.clear();
+	m_collSymbolList.clear();
 
 	FILE *pSymFile = fopen(strSymFile.c_str(), "r");
 	
@@ -21,11 +23,11 @@ bool parseSymFile(const std::string &strSymFile, tSymList &collSymList)
 		
 		if((strSymLine.length() < 12) || (strSymLine[8] != ' ') || (strSymLine[10] != ' '))
 		{
-			printf("Error in symbol line: %d (\"%s\")\n", collSymList.size(), strSymLine.c_str());
+			printf("Error in symbol line: %d (\"%s\")\n", m_collSymbolList.size(), strSymLine.c_str());
 			return false;
 		}
 		
-		while(strSymLine[strSymLine.length() - 1] == '\n')
+		while((strSymLine[strSymLine.length() - 1] == '\n') || (strSymLine[strSymLine.length() - 1] == '\r'))
 		{
 			strSymLine.erase(strSymLine.length() - 1, 1);
 		}
@@ -41,9 +43,7 @@ bool parseSymFile(const std::string &strSymFile, tSymList &collSymList)
 		aSymEntry.cType = strSymType[0];
 		aSymEntry.uAddress = strtoul(strSymAddr.c_str(), NULL, 16);
 
-		collSymList.push_back(aSymEntry);
-
-		//printf("%s:%s:%s\n", strSymAddr.c_str(), strSymType.c_str(), strSymLine.c_str());
+		m_collSymbolList.push_back(aSymEntry);
 	}
 	
 	fclose(pSymFile);
@@ -52,13 +52,13 @@ bool parseSymFile(const std::string &strSymFile, tSymList &collSymList)
 
 }
 
-bool lookupSymbol(const std::string &strSymName, const tSymList &collSymList, unsigned &uSymIdx)
+bool Symbols::lookup(const std::string &strSymName, unsigned &uSymIdx)
 {
-	unsigned uNumSymbols = collSymList.size();
+	unsigned uNumSymbols = m_collSymbolList.size();
 
 	for(unsigned uIdx = 0; uIdx < uNumSymbols; uIdx++)
 	{
-		if(collSymList[uIdx].strName == strSymName)
+		if(m_collSymbolList[uIdx].strName == strSymName)
 		{
 			uSymIdx = uIdx;
 			return true;
@@ -66,4 +66,15 @@ bool lookupSymbol(const std::string &strSymName, const tSymList &collSymList, un
 	}
 	
 	return false;
+}
+
+unsigned Symbols::getCount(void)
+{
+	return m_collSymbolList.size();
+}
+
+const tSymbolEntry *Symbols::get(unsigned uSymIdx)
+{
+	M_ASSERT(uSymIdx < getCount());
+	return &m_collSymbolList[uSymIdx];
 }

@@ -12,7 +12,16 @@ typedef struct {
 
 typedef std::vector<tSymbolEntry> tSymList;
 
-bool parseSymFile(const std::string &strSymFile, tSymList &collSymList);
-bool lookupSymbol(const std::string &strSymName, const tSymList &collSymList, unsigned &uSymIdx);
+class Symbols
+{
+public:
+	static bool parseSymFile(const std::string &strSymFile);
+	static bool lookup(const std::string &strSymName, unsigned &uSymIdx);
+	static unsigned getCount(void);
+	static const tSymbolEntry *get(unsigned uSymIdx);
+
+private:
+	static tSymList m_collSymbolList;
+};
 
 #endif
