@@ -51,6 +51,8 @@
 #define LOCK_STATISTIC
 #include "hw_lock.h"
 
+#include "hfc_usb.h"
+
 #define HFC_USB_NAME "hfc_usb"
 
 #define HFC_USB_ERR KERN_ERR HFC_USB_NAME ": "
@@ -69,6 +71,8 @@ static int HFC_cnt;
 /* begin old stuff */
 struct hfcusb_data;
 struct usb_fifo;
+struct led_info;
+
 static void hfc_usb_stop_isoc_chain(struct usb_fifo *fifo);
 static int hfc_usb_lock_dev(void *data, int nowait);
 static void hfc_usb_unlock_dev(void *data);
@@ -651,10 +655,212 @@ hfc_usb_hw_init(hfcusb_data *hfc)
 /* USB related functions                                                      */
 /******************************************************************************/
 
+static struct led_info hfc_led_info[] = {
+	{LED_OFF,	LED_NORMAL,	{0x04, 0x00, 0x02, 0x01}},
+	{LED_SCHEME1,	LED_INVERTED,	{0x08, 0x40, 0x20, 0x10}},
+	{LED_SCHEME1,	LED_NORMAL,	{0x04, 0x00, 0x02, 0x01}},
+	{LED_SCHEME1,	LED_NORMAL,	{0x02, 0x00, 0x01, 0x04}},
+};
+
+static struct usb_device_id hfc_usb_id_table[] = {
+	{HFC_USB_DEVICE(0x07b0, 0x0007, 0)},	/* Billion USB TA 2 */
+	{HFC_USB_DEVICE(0x0742, 0x2008, 1)},	/* Stollmann USB TA */
+	{HFC_USB_DEVICE(0x0959, 0x2bd0, 2)},	/* Colognechip USB eval TA */
+	{HFC_USB_DEVICE(0x08e3, 0x0301, 3)},	/* OliTec ISDN USB */
+	{HFC_USB_DEVICE(0x0675, 0x1688, 2)},	/* DrayTec ISDN USB */
+	{HFC_USB_DEVICE(0x07fa, 0x0846, 1)},	/* Bewan ISDN USB TA */
+	{}					/* end with an all-zeroes entry */
+};
+
+// this array represents all endpoints possible in the HCF-USB
+// the last 2 entries are the configuration number and the minimum interval for Interrupt endpoints
+static int hfc_usb_ep_cfg[][18]=
+{
+	// INT in, ISO out config
+	{EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NOP,EP_INT,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_NUL,EP_NUL,CNF_4INT3ISO,2},
+	{EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NUL,EP_INT,EP_NUL,EP_NUL,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_ISO,EP_NUL,EP_NUL,EP_NUL,CNF_3INT3ISO,2},
+	// ISO in, ISO out config
+	{EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_NOP,EP_ISO,CNF_4ISO3ISO,2},
+	{EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_NUL,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_ISO,EP_NUL,EP_NUL,CNF_3ISO3ISO,2},
+};
+
+#define NUM_EP_CFG (sizeof(ep_cfg) / sizeof(ep_cfg[0]))
+
+static int
+hfc_usb_init_dev(alt_idx, cfg_idx)
+{
+	int ep_idx;
+	hfcusb_data *hfc;
+
+	if (!(hfc = kmalloc(sizeof(*hfc), GFP_KERNEL)))
+		return -ENOMEM;
+
+	memset(hfc, 0, sizeof(*hfc));
+
+
+	for (ep_idx = 0; ep_idx < host_if->desc.bNumEndpoints; ep_idx++) {
+		ep = &host_if->endpoint[ep_idx];
+		
+	}
+
+
+
+#if 0
+			iface = iface_used;
+
+			ep = iface->endpoint;	/* first endpoint descriptor */
+			vcf = validconf[small_match];
+
+			for (i = 0; i < iface->desc.bNumEndpoints; i++) {
+				ep_addr = ep->desc.bEndpointAddress;
+				idx = ((ep_addr & 0x7f)-1)*2;	/* get endpoint base */
+				if (ep_addr & 0x80)
+					idx++;
+				cidx = idx & 7;
+				attr = ep->desc.bmAttributes;
+
+				// only initialize used endpoints
+				if (vcf[idx] != EP_NOP && vcf[idx] != EP_NUL) {
+					switch (attr) {
+						case USB_ENDPOINT_XFER_INT:
+							context->fifos[cidx].pipe = usb_rcvintpipe(dev, ep->desc.bEndpointAddress);
+							context->fifos[cidx].usb_transfer_mode = USB_INT;
+							packet_size = ep->desc.wMaxPacketSize; // remember max packet size
+#ifdef VERBOSE_USB_DEBUG
+							printk (KERN_INFO "HFC-USB: Interrupt-In Endpoint found %d ms(idx:%d cidx:%d)!\n",
+								ep->desc.bInterval, idx, cidx);
+#endif
+							break;
+						case USB_ENDPOINT_XFER_BULK:
+							if (ep_addr & 0x80)
+								context->fifos[cidx].pipe = usb_rcvbulkpipe(dev, ep->desc.bEndpointAddress);
+							else
+								context->fifos[cidx].pipe = usb_sndbulkpipe(dev, ep->desc.bEndpointAddress);
+							context->fifos[cidx].usb_transfer_mode = USB_BULK;
+							packet_size = ep->desc.wMaxPacketSize; // remember max packet size
+#ifdef VERBOSE_USB_DEBUG
+							printk (KERN_INFO "HFC-USB: Bulk Endpoint found (idx:%d cidx:%d)!\n",
+								idx, cidx);
+#endif
+							break;
+						case USB_ENDPOINT_XFER_ISOC:
+							if (ep_addr & 0x80)
+								context->fifos[cidx].pipe = usb_rcvisocpipe(dev, ep->desc.bEndpointAddress);
+							else
+								context->fifos[cidx].pipe = usb_sndisocpipe(dev, ep->desc.bEndpointAddress);
+							context->fifos[cidx].usb_transfer_mode = USB_ISOC;
+							iso_packet_size = ep->desc.wMaxPacketSize; // remember max packet size
+#ifdef VERBOSE_USB_DEBUG
+							printk (KERN_INFO "HFC-USB: ISO Endpoint found (idx:%d cidx:%d)!\n",
+								idx, cidx);
+#endif
+							break;
+						default:
+							context->fifos[cidx].pipe = 0;	/* reset data */
+					}	/* switch attribute */
+
+					if (context->fifos[cidx].pipe) {
+						context->fifos[cidx].fifonum = cidx;
+						context->fifos[cidx].hfc = context;
+						context->fifos[cidx].usb_packet_maxlen = ep->desc.wMaxPacketSize;
+						context->fifos[cidx].intervall = ep->desc.bInterval;
+						context->fifos[cidx].skbuff = NULL;
+#ifdef VERBOSE_USB_DEBUG
+						printk (KERN_INFO "HFC-USB: fifo%d pktlen %d interval %d\n",
+							context->fifos[cidx].fifonum,
+							context->fifos[cidx].usb_packet_maxlen,
+							context->fifos[cidx].intervall);
+#endif
+					}
+				}
+
+				ep++;
+			}
+
+			// now share our luck
+			context->dev = dev;						/* save device */
+			context->if_used = ifnum;					/* save used interface */
+			context->alt_used = alt_used;					/* and alternate config */
+			context->ctrl_paksize = dev->descriptor.bMaxPacketSize0;	/* control size */
+			context->cfg_used=vcf[16];					// store used config
+			context->vend_idx=vend_idx;					// store found vendor
+			context->packet_size=packet_size;
+			context->iso_packet_size=iso_packet_size;
+
+			/* create the control pipes needed for register access */
+			context->ctrl_in_pipe = usb_rcvctrlpipe(context->dev, 0);
+			context->ctrl_out_pipe = usb_sndctrlpipe(context->dev, 0);
+			context->ctrl_urb = usb_alloc_urb(0, GFP_KERNEL);
+
+			printk(KERN_INFO "HFC-USB: detected \"%s\" configuration: %s (if=%d alt=%d)\n",
+				vdata[vend_idx].vend_name, conf_str[small_match], context->if_used, context->alt_used);
+
+			/* init the chip and register the driver */
+			if (hfc_usb_hw_init(context))
+			{
+				if (context->ctrl_urb) {
+					usb_unlink_urb(context->ctrl_urb);
+					usb_free_urb(context->ctrl_urb);
+					context->ctrl_urb = NULL;
+				}
+				kfree(context);
+				return(-EIO);
+			}
+			usb_set_intfdata(intf, context);
+			return(0);
+#endif
+
+	return 0;
+}
+
 static int 
 hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
-	return hfc_usb_probe_old(intf, id);
+	int alt_idx;
+	int cfg_idx;
+	struct usb_host_endpoint *ep;
+	int *ep_cfg;
+	int ep_cfg_idx;
+	int ep_idx;
+	struct usb_host_interface *host_if;
+	int num_valid_ep;
+	
+	//struct usb_device *dev = interface_to_usbdev(intf);
+	//struct led_info *led = &hfc_led_info[id->driver_info];
+
+	for (alt_idx = 0; alt_idx < intf->num_altsetting; alt_idx++) {
+		num_valid_ep = 0;
+		host_if = &intf->altsetting[alt_idx];
+	
+		for (cfg_idx = 0; cfg_idx < NUM_EP_CFG; cfg_idx++) {
+			ep_cfg = hfc_usb_ep_cfg[cfg_idx];
+
+			for (ep_idx = 0; ep_idx < host_if->desc.bNumEndpoints; ep_idx++) {
+				ep = &host_if->endpoint[ep_idx];
+
+				ep_cfg_idx = ((ep->desc.bEndpointAddress & USB_ENDPOINT_NUMBER_MASK) - 1) * 2;
+				if (ep->desc.bEndpointAddress & USB_DIR_IN)
+					ep_cfg_idx++;
+					
+				if (ep_cfg[ep_cfg_idx] == EP_NOP)
+					continue;
+
+				if ((ep_cfg[ep_cfg_idx] == EP_NUL) || (ep_cfg[ep_cfg_idx] != ep->desc.bmAttributes) || 
+					((ep->desc.bmAttributes == USB_ENDPOINT_XFER_INT) && (ep->desc.bInterval < ep_cfg[17]))) {
+					num_valid_ep = 0;
+					break;
+				}
+				
+				num_valid_ep++;
+			}
+			
+			/* Found valid configuration - initialize device */
+			if (num_valid_ep)
+				return hfc_usb_init_dev(alt_idx, cfg_idx);
+		}
+	}
+
+	return -EINVAL;
 }
 
 static void 
@@ -662,16 +868,6 @@ hfc_usb_disconnect(struct usb_interface *intf)
 {
 	hfc_usb_disconnect_old(intf);
 }
-
-static struct usb_device_id hfc_usb_id_table[] = {
-	{USB_DEVICE(0x07b0, 0x0007)},	/* Billion USB TA 2 */
-	{USB_DEVICE(0x0742, 0x2008)},	/* Stollmann USB TA */
-	{USB_DEVICE(0x0959, 0x2bd0)},	/* Colognechip USB eval TA */
-	{USB_DEVICE(0x08e3, 0x0301)},	/* OliTec ISDN USB */
-	{USB_DEVICE(0x0675, 0x1688)},	/* DrayTec ISDN USB */
-	{USB_DEVICE(0x07fa, 0x0846)},	/* Bewan ISDN USB TA */
-	{}				/* end with an all-zeroes entry */
-};
 
 static struct usb_driver hfc_usb_driver = {
 	.owner = THIS_MODULE,

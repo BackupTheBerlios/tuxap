@@ -1,0 +1,42 @@
+/*
+ * hfc_usb.h
+ *
+ * modular mISDN driver for Colognechip HFC-USB chip
+ *
+ * Author : Florian Schirmer <jolt@tuxbox.org>
+ *
+ *          based on the second i4l hfc_usb driver of
+ *            Peter Sprenger  (sprenger@moving-byters.de)
+ *            Martin Bachem   (info@colognechip.com)
+ *
+ *          based on the first i4l hfc_usb driver of 
+ *            Werner Cornelius (werner@isdn-development.de)
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ *
+*/
+
+#ifndef HFC_USB_H
+#define HFC_USB_H
+
+struct led_info {
+	u8 scheme;    // led display scheme
+	u8 invert;    // invert led aux port settings
+	u8 bits[4];   // array of 4 possible LED bitmask settings
+};
+
+#define HFC_USB_DEVICE(vendor_id, product_id, led_info_idx) USB_DEVICE(vendor_id, product_id), .driver_info = led_info_idx
+
+#endif
