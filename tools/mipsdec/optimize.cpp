@@ -263,6 +263,60 @@ static bool detectElseBranch(tInstList &collInstList)
 	return false;
 }
 
+static void invertCondition(Instruction &aInstruction)
+{
+	M_ASSERT(aInstruction.getClassType() == IC_BRANCH);
+
+	switch(aInstruction.eType)
+	{
+		case IT_BEQ:
+			aInstruction.eType = IT_BNE;
+			break;
+		case IT_BLTZ:
+			aInstruction.eType = IT_BGEZ;
+			break;
+		default:
+			M_ASSERT(false);
+	}
+}
+
+/* Detect branch instructions with empty if branches and non empty     */
+/* else branches (caused/happens in different optimizer steps)         */
+/* Preconditions:                                                      */
+/* - Empty else branch                                                 */
+/* - Non empty else branch                                             */
+static bool detectOnlyElseBranch(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		/* Do we have an else branch and no if branch? */
+		if((itCurr->collIfBranch.size() == 0) && (itCurr->collElseBranch.size() > 0))
+		{
+			invertCondition(*itCurr);
+			itCurr->collIfBranch = itCurr->collElseBranch;
+			itCurr->collElseBranch.clear();
+			return true;
+		}
+
+		if(detectOnlyElseBranch(itCurr->collIfBranch))
+		{
+			return true;
+		}
+
+		if(detectOnlyElseBranch(itCurr->collElseBranch))
+		{
+			return true;
+		}
+
+		itCurr++;
+	}
+
+	return false;
+}
+
 bool optimizeInstructions(tInstList &collInstList)
 {
 	if(reassembleSingleJumpBlocks(collInstList))
@@ -271,6 +325,11 @@ bool optimizeInstructions(tInstList &collInstList)
 	}
 	
 	if(detectElseBranch(collInstList))
+	{
+		return true;
+	}
+	
+	if(detectOnlyElseBranch(collInstList))
 	{
 		return true;
 	}

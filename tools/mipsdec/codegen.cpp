@@ -118,11 +118,19 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				bBranchAllowed = true;
 				break;
 			}
+			case IT_BGEZ:
+			{
+				fprintf(pDestFile, "\n");
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "if(((signed int)%s) >= 0)\n", getRegVarName(aInstruction.eRS).c_str());
+				bBranchAllowed = true;
+				break;
+			}
 			case IT_BLTZ:
 			{
 				fprintf(pDestFile, "\n");
 				doIndent(pDestFile, uDepth);
-				fprintf(pDestFile, "if(%s < 0)\n", getRegVarName(aInstruction.eRS).c_str());
+				fprintf(pDestFile, "if(((signed int)%s) < 0)\n", getRegVarName(aInstruction.eRS).c_str());
 				bBranchAllowed = true;
 				break;
 			}
