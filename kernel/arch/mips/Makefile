@@ -159,9 +159,10 @@ cflags-$(CONFIG_CPU_R4X00)	+= \
 			$(call set_gccflags,r4600,mips3,r4600,mips3,mips2) \
 			-Wa,--trap
 
-cflags-$(CONFIG_CPU_MIPS32)	+= \
-			$(call set_gccflags,mips32,mips32,r4600,mips3,mips2) \
-			-Wa,--trap
+#cflags-$(CONFIG_CPU_MIPS32)	+= \
+#			$(call set_gccflags,mips32,mips32,r4600,mips3,mips2) \
+#			-Wa,--trap
+cflags-$(CONFIG_CPU_MIPS32)	+= -mips2 -Wa,--trap
 
 cflags-$(CONFIG_CPU_MIPS64)	+= \
 			$(call set_gccflags,mips64,mips64,r4600,mips3,mips2) \
@@ -613,6 +614,14 @@ libs-$(CONFIG_SIBYTE_SENTOSA)	+= arch/mips/sibyte/swarm/
 load-$(CONFIG_SIBYTE_SENTOSA)	:= 0xffffffff80100000
 libs-$(CONFIG_SIBYTE_SWARM)	+= arch/mips/sibyte/swarm/
 load-$(CONFIG_SIBYTE_SWARM)	:= 0xffffffff80100000
+
+#
+# Broadcom BCM47XX boards
+#
+core-$(CONFIG_BCM47XX)		+= arch/mips/bcm47xx/ arch/mips/bcm47xx/broadcom/
+cflags-$(CONFIG_BCM47XX)	+= -Iarch/mips/bcm47xx/broadcom/include
+load-$(CONFIG_BCM47XX)		:= 0x80001000
+
 
 #
 # SNI RM200 PCI

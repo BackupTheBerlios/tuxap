@@ -69,3 +69,4 @@ obj-$(CONFIG_MTD_PB1000)        += pb1xxx-flash.o
 obj-$(CONFIG_MTD_PB1100)        += pb1xxx-flash.o
 obj-$(CONFIG_MTD_PB1500)        += pb1xxx-flash.o
 obj-$(CONFIG_MTD_DB1X00)        += db1x00-flash.o
+obj-$(CONFIG_MTD_BCM47XX)        += bcm47xx-flash.o

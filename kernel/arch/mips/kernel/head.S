@@ -102,11 +102,19 @@
 #endif
 	.endm
 
+#ifdef CONFIG_BCM4710
+#undef eret
+#define eret nop; nop; eret
+#endif
+
+	j	kernel_entry
+	nop
+
 	/*
 	 * Reserved space for exception handlers.
 	 * Necessary for machines which link their kernels at KSEG0.
 	 */
-	.fill	0x400
+	.fill	0x3f4
 
 EXPORT(stext)					# used for profiling
 EXPORT(_stext)

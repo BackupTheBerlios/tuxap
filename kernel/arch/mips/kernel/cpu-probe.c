@@ -554,6 +554,28 @@ static inline void cpu_probe_sandcraft(struct cpuinfo_mips *c)
 	}
 }
 
+static inline void cpu_probe_broadcom(struct cpuinfo_mips *c)
+{
+	decode_config1(c);
+	switch (c->processor_id & 0xff00) {
+		case PRID_IMP_BCM3302:
+			c->cputype = CPU_BCM3302;
+			c->isa_level = MIPS_CPU_ISA_M32;
+			c->options = MIPS_CPU_TLB | MIPS_CPU_4KEX |
+					MIPS_CPU_4KTLB | MIPS_CPU_COUNTER;
+		break;
+		case PRID_IMP_BCM4710:
+			c->cputype = CPU_BCM4710;
+			c->isa_level = MIPS_CPU_ISA_M32;
+			c->options = MIPS_CPU_TLB | MIPS_CPU_4KEX |
+					MIPS_CPU_4KTLB | MIPS_CPU_COUNTER;
+		break;
+	default:
+		c->cputype = CPU_UNKNOWN;
+		break;
+	}
+}
+
 __init void cpu_probe(void)
 {
 	struct cpuinfo_mips *c = &current_cpu_data;
@@ -576,7 +598,9 @@ __init void cpu_probe(void)
 	case PRID_COMP_SIBYTE:
 		cpu_probe_sibyte(c);
 		break;
-
+	case PRID_COMP_BROADCOM:
+		cpu_probe_broadcom(c);
+		break;
 	case PRID_COMP_SANDCRAFT:
 		cpu_probe_sandcraft(c);
 		break;
