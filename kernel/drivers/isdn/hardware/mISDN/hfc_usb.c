@@ -57,6 +57,7 @@
 
 #define HFC_USB_ERR KERN_ERR HFC_USB_NAME ": "
 #define HFC_USB_INFO KERN_INFO HFC_USB_NAME ": "
+#define HFC_USB_DEBUG KERN_INFO HFC_USB_NAME ": "
 
 static const char hfc_usb_name[] = HFC_USB_NAME;
 static const char hfc_usb_revision[] = "1.0";
@@ -97,17 +98,132 @@ static inline int hfc_usb_read_reg(hfcusb_data *hfc, u8 reg, u8 *val)
 	return usb_control_msg(hfc->dev, hfc->ctrl_in_pipe, HFC_REG_RD, 0xC0, 0, reg, val, sizeof(*val), HFC_CTRL_TIMEOUT);
 }
 
-static int hfc_usb_set_fifo_mode(hfcusb_data *hfc, u8 fifo_idx, u8 enable, u8 transparent)
+static void
+hfc_usb_submit_reg_xs(hfcusb_data *hfc)
+{
+	int err;
+	unsigned long flags;
+	struct reg_request *req = NULL;
+
+	spin_lock_irqsave(&hfc->reg_request_lock, flags);
+        if ((!hfc->reg_request_busy) && (!list_empty(&hfc->reg_request_list))) {
+                req = list_entry(hfc->reg_request_list.next, struct reg_request, list);
+		list_del(&req->list);
+		hfc->reg_request_busy = 1;
+	}
+	spin_unlock_irqrestore(&hfc->reg_request_lock, flags);
+
+	if (!req)
+		return;
+
+	hfc->ctrl_write.wIndex = req->reg;
+	hfc->ctrl_write.wValue = req->val;
+
+	kfree(req);
+
+	hfc->ctrl_urb->pipe = hfc->ctrl_out_pipe;
+	hfc->ctrl_urb->setup_packet = (u_char *)&hfc->ctrl_write;
+	hfc->ctrl_urb->transfer_buffer = NULL;
+	hfc->ctrl_urb->transfer_buffer_length = 0;
+	
+	err = usb_submit_urb(hfc->ctrl_urb, GFP_ATOMIC);
+	printk(HFC_USB_DEBUG "ctrl_start_transfer: submit %d\n", err);
+}
+
+static void
+hfc_usb_complete_reg_xs(struct urb *urb, struct pt_regs *regs)
+{
+	unsigned long flags;
+	hfcusb_data *hfc = (hfcusb_data *)urb->context;
+
+	printk(HFC_USB_DEBUG "Register access completed\n");
+
+	spin_lock_irqsave(&hfc->reg_request_lock, flags);
+	hfc->reg_request_busy = 0;
+	spin_unlock_irqrestore(&hfc->reg_request_lock, flags);
+
+	hfc_usb_submit_reg_xs(hfc);
+}
+
+static int
+hfc_usb_queue_reg_xs(hfcusb_data *hfc, u8 reg, u8 val)
+{
+	struct reg_request *req;
+	unsigned long flags;
+	
+	printk(HFC_USB_DEBUG "Delayed register access (reg: 0x%01X, val: 0x%01X)\n", reg, val);
+	
+	if (!(req = kmalloc(sizeof(*req), GFP_ATOMIC))) {
+		printk(HFC_USB_ERR "Unable to allocate register request memory\n");
+		return -ENOMEM;
+	}
+
+	req->reg = reg;
+	req->val = val;
+	
+	spin_lock_irqsave(&hfc->reg_request_lock, flags);
+	list_add_tail(&req->list, &hfc->reg_request_list);
+	spin_unlock_irqrestore(&hfc->reg_request_lock, flags);
+	
+	hfc_usb_submit_reg_xs(hfc);
+	
+	return 0;
+}
+
+static int
+hfc_usb_set_statemachine(hfcusb_data *hfc, u8 activate)
 {
 	u8 val = 0;
+	
+	if (activate)
+		val |= 0x03 << 5;
+	else
+		val |= 0x02 << 5;
+
+	hfc_usb_queue_reg_xs(hfc, HFCUSB_STATES, val);
+	
+	return 0;
+}
+
+static void 
+hfc_usb_process_state(hfcusb_data *hfc, u8 new_state)
+{
+	if (hfc->l1_state == new_state)
+		return;
+
+	printk(HFC_USB_INFO "State transition from %d to %d\n", hfc->l1_state, new_state);
+
+	switch(new_state) {
+		case 3:
+			break;
+		case 7:
+			hfc_usb_set_statemachine(hfc, 1);
+			hfc->l1_activated = 1;
+			hfc_usb_handle_led(hfc, LED_S0_ON);
+			break;
+		default:
+			printk(HFC_USB_ERR "Unhandled state %d\n", new_state);
+	
+	}
+	
+	hfc->l1_state = new_state;
+}
+
+static int
+hfc_usb_set_fifo_mode(hfcusb_data *hfc, u8 fifo_idx, u8 enable, u8 transparent)
+{
+	u8 val = 0;
+	u8 par_val = 0;
 
 	if (fifo_idx >= HFCUSB_NUM_FIFOS) {
 		printk(HFC_USB_ERR "Invalid fifo idx=%d\n", fifo_idx);
 		return -EINVAL;
 	}
 
-	if ((fifo_idx == HFCUSB_D_TX) || (fifo_idx == HFCUSB_D_RX))
+	if ((fifo_idx == HFCUSB_D_TX) || (fifo_idx == HFCUSB_D_RX)) {
 		val |= 0x01 << 0;
+		par_val |= 0x02;
+	}
 	
 	if (transparent)
 		val |= 0x01 << 1;
@@ -116,7 +232,7 @@ static int hfc_usb_set_fifo_mode(hfcusb_data *hfc, u8 fifo_idx, u8 enable, u8 tr
 		val |= 0x02 << 2;
 
 	hfc_usb_write_reg(hfc, HFCUSB_FIFO, fifo_idx);	/* select the desired fifo */
-	hfc_usb_write_reg(hfc, HFCUSB_HDLC_PAR, ((fifo_idx <= HFCUSB_B2_RX) ? 0 : 2));	    // set 2 bit for D- & E-channel
+	hfc_usb_write_reg(hfc, HFCUSB_HDLC_PAR, par_val);
 	hfc_usb_write_reg(hfc, HFCUSB_CON_HDLC, val);
 	hfc_usb_write_reg(hfc, HFCUSB_INC_RES_F, 2);	/* reset the fifo */
 	
@@ -131,7 +247,7 @@ hfc_usb_write_led(hfcusb_data *hfc, u8 led_state)
 {
 	if (led_state != hfc->led_state) {
 		hfc->led_state = led_state;
-		queue_control_request(hfc, HFCUSB_P_DATA, (hfc->led->invert) ? ~led_state : led_state, 1);
+		hfc_usb_queue_reg_xs(hfc, HFCUSB_P_DATA, (hfc->led->scheme == LED_INVERTED) ? ~led_state : led_state);
 	}
 }
 
@@ -282,7 +398,7 @@ collect_rx_frame(usb_fifo *fifo, u8 *data, int len, int finish)
 }
 
 static void
-hfc_usb_rx_complete(struct urb *urb, struct pt_regs *regs)
+hfc_usb_rx_complete_old(struct urb *urb, struct pt_regs *regs)
 {
 	usb_fifo *fifo = (usb_fifo *)urb->context;
 	hfcusb_data *hfc = fifo->hfc;
@@ -311,18 +427,52 @@ hfc_usb_rx_complete(struct urb *urb, struct pt_regs *regs)
 	buf = fifo->buffer;
 
 	if (fifo->last_urblen != fifo->usb_packet_maxlen) {
+		//if ((buf[0] >> 4) == 3) {
+		//	printk(HFC_USB_INFO "Activating L1\n");
+		//	hfc_usb_set_statemachine(hfc, 1);
+		//}
+
 		// the threshold mask is in the 2nd status byte
 		hfc->threshold_mask = buf[1];
 		// the S0 state is in the upper half of the 1st status byte
 		state_handler(hfc, buf[0] >> 4);
 		// if we have more than the 2 status bytes -> collect data
-		if (len > 2)
+		if (len > 2) {
+			printk(HFC_USB_INFO "RX data (end)\n");
 			collect_rx_frame(fifo, buf + 2, urb->actual_length - 2, buf[0] & 1);
+		}
 	} else {
+		printk(HFC_USB_INFO "RX data (continued)\n");
 		collect_rx_frame(fifo, buf, urb->actual_length, 0);
 	}
 
 	fifo->last_urblen = urb->actual_length;
+}
+
+static void
+hfc_usb_rx_complete(struct urb *urb, struct pt_regs *regs)
+{
+	usb_fifo *fifo = (usb_fifo *)urb->context;
+	hfcusb_data *hfc = fifo->hfc;
+
+	printk(HFC_USB_INFO "RX event on fifo %d\n", fifo->fifonum);
+
+	if (!fifo->active) {
+		printk(HFC_USB_ERR "Event on inactive FIFO %d\n", fifo->fifonum);
+		return;
+	}
+	
+	if (urb->status) {
+		printk(HFC_USB_ERR "Invalid URB status %d\n", urb->status);
+		return;
+	}
+	
+	printk(HFC_USB_INFO "Got %d URB bytes\n", urb->actual_length);
+	
+	if (urb->actual_length >= 2) {
+		printk(HFC_USB_INFO "State=0x%01X Err=%d EOF=%d Fill0x%01X\n", fifo->buffer[0] >> 4, (fifo->buffer[0] >> 1) & 0x01, fifo->buffer[0] & 0x01, fifo->buffer[1]);
+		hfc_usb_process_state(hfc, fifo->buffer[0] >> 4);
+	}
 }
 
 /* stops running iso chain and frees their pending urbs */
@@ -400,8 +550,10 @@ hfc_usb_start_int_fifo(usb_fifo * fifo)
 
 	if (!fifo->urb) {
 		fifo->urb = usb_alloc_urb(0, GFP_KERNEL);
-		if (!fifo->urb)
+		if (!fifo->urb) {
+			printk(HFC_USB_ERR "Unable allocate URB\n");
 			return -ENOMEM;
+		}
 	}
 
 	usb_fill_int_urb(fifo->urb, fifo->hfc->dev, fifo->pipe, fifo->buffer,
@@ -1028,7 +1180,7 @@ hfc_usb_init_hw(hfcusb_data *hfc, u32 packet_size, u32 iso_packet_size)
 	hfc->ctrl_write.bRequest = 0;
 	hfc->ctrl_write.wLength = 0;
 
-//	usb_fill_control_urb(hfc->ctrl_urb, hfc->dev, hfc->ctrl_out_pipe, (u_char *)&hfc->ctrl_write, NULL, 0, ctrl_complete, hfc);
+	usb_fill_control_urb(hfc->ctrl_urb, hfc->dev, hfc->ctrl_out_pipe, (u_char *)&hfc->ctrl_write, NULL, 0, hfc_usb_complete_reg_xs, hfc);
 					
 	/* Init All Fifos */
 	for(i = 0; i < HFCUSB_NUM_FIFOS; i++)
@@ -1037,9 +1189,6 @@ hfc_usb_init_hw(hfcusb_data *hfc, u32 packet_size, u32 iso_packet_size)
 		hfc->fifos[i].iso[1].purb = NULL;
 		hfc->fifos[i].active = 0;
 	}
-
-	list_add_tail(&hfc->list, &hfc_usb.ilist);
-	lock_HW_init(&hfc->lock);
 
 #warning TODO: HACK! HACK!	
 #if 0
@@ -1068,19 +1217,28 @@ hfc_usb_deinit_hw(hfcusb_data *hfc)
 /******************************************************************************/
 
 static struct led_info hfc_led_info[] = {
-	{LED_OFF,	LED_NORMAL,	{0x04, 0x00, 0x02, 0x01}},
-	{LED_SCHEME1,	LED_INVERTED,	{0x08, 0x40, 0x20, 0x10}},
-	{LED_SCHEME1,	LED_NORMAL,	{0x04, 0x00, 0x02, 0x01}},
-	{LED_SCHEME1,	LED_NORMAL,	{0x02, 0x00, 0x01, 0x04}},
+	{LED_OFF,	{0x04, 0x00, 0x02, 0x01}},
+	{LED_INVERTED,	{0x08, 0x40, 0x20, 0x10}},
+	{LED_NORMAL,	{0x04, 0x00, 0x02, 0x01}},
+	{LED_NORMAL,	{0x02, 0x00, 0x01, 0x04}},
 };
+
+#if 0
+	{0x07b0, 0x0007, "Billion tiny USB ISDN TA 128", LED_SCHEME1, {0x80,-64,-32,-16}},  /* Billion TA */
+	{0x0675, 0x1688, "DrayTec USB ISDN TA",          LED_SCHEME1, {1,2,0,0}},           /* Draytec TA */
+#endif
 
 static struct usb_device_id hfc_usb_id_table[] = {
 	{HFC_USB_DEVICE(0x07b0, 0x0007, 1)},	/* Billion USB TA 2 */
 	{HFC_USB_DEVICE(0x0742, 0x2008, 2)},	/* Stollmann USB TA */
+	{HFC_USB_DEVICE(0x0742, 0x2009, 2)},	/* Aceex USB ISDN TA */
+	{HFC_USB_DEVICE(0x0742, 0x200A, 2)},	/* OEM USB ISDN TA */
 	{HFC_USB_DEVICE(0x0959, 0x2bd0, 0)},	/* Colognechip USB eval TA */
 	{HFC_USB_DEVICE(0x08e3, 0x0301, 3)},	/* OliTec ISDN USB */
 	{HFC_USB_DEVICE(0x0675, 0x1688, 2)},	/* DrayTec ISDN USB */
 	{HFC_USB_DEVICE(0x07fa, 0x0846, 1)},	/* Bewan ISDN USB TA */
+	{HFC_USB_DEVICE(0x07fa, 0x0847, 1)},	/* Bewan TA */
+	{HFC_USB_DEVICE(0x07b0, 0x0006, 1)},	/* Twister ISDN TA */
 	{}					/* end with an all-zeroes entry */
 };
 
@@ -1252,6 +1410,8 @@ hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	hfc->led = &hfc_led_info[id->driver_info];
 	hfc->if_used = intf->altsetting[alt_idx].desc.bInterfaceNumber;
 	hfc->alt_used = alt_idx;
+	INIT_LIST_HEAD(&hfc->reg_request_list);
+	spin_lock_init(&hfc->reg_request_lock);
 
 	/* init usb settings */
 	if ((err = hfc_usb_init_usb(hfc, intf, alt_idx, cfg_idx, &packet_size, &iso_packet_size))) {
@@ -1272,6 +1432,11 @@ hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		kfree(hfc);
 		return err;
 	}
+	
+//	hfc_usb_set_statemachine(hfc, 1);
+
+//	list_add_tail(&hfc->list, &hfc_usb.ilist);
+//	lock_HW_init(&hfc->lock);
 
 //	hfc_usb_init_dchannel(hfc);
 //	hfc_usb_init_bchannels(hfc);
