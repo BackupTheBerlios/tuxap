@@ -21,32 +21,32 @@ typedef enum {
 } tInstructionFormat;
 
 typedef enum {
-	IT_ADDIU,
-	IT_ADDU,
-	IT_AND,
-	IT_ANDI,
-	IT_BEQ,
-	IT_BLTZ,
-	IT_BNE,
+	IT_ADDIU,		// No delay slot
+	IT_ADDU,		// No delay slot
+	IT_AND,			// No delay slot
+	IT_ANDI,		// No delay slot
+	IT_BEQ,			// Delay slot
+	IT_BLTZ,		// Delay slot
+	IT_BNE,			// Delay slot
 	IT_BNEL,
-	IT_J,
-	IT_JALR,
-	IT_JALR_HB,
-	IT_JR,
-	IT_JR_HB,
-	IT_LUI,
-	IT_LW,
-	IT_MFC0,
-	IT_MTC0,
-	IT_NOP,
-	IT_OR,
-	IT_ORI,
-	IT_SLL,
-	IT_SLTI,
-	IT_SLTIU,
-	IT_SSNOP,
-	IT_SW,
-	IT_XORI,
+	IT_J,				// Delay slot
+	IT_JALR,		// Delay slot
+	IT_JALR_HB,	// Delay slot
+	IT_JR,			// Delay slot
+	IT_JR_HB,		// Delay slot
+	IT_LUI,			// No delay slot
+	IT_LW,			// No delay slot
+	IT_MFC0,		// No delay slot
+	IT_MTC0,		// No delay slot
+	IT_NOP,			// No delay slot
+	IT_OR,			// No delay slot
+	IT_ORI,			// No delay slot
+	IT_SLL,			// No delay slot
+	IT_SLTI,		// No delay slot
+	IT_SLTIU,		// No delay slot
+	IT_SSNOP,		// No delay slot
+	IT_SW,			// No delay slot
+	IT_XORI,		// No delay slot
 } tInstructionType;
 
 class tInstruction;
@@ -55,6 +55,11 @@ typedef std::vector<tInstruction> tInstList;
 class tInstruction
 {
 public:
+	tInstruction(void) :
+			bDelaySlotReordered(false)
+	{
+	}
+
 	unsigned uAddress;
 	unsigned uRaw;
 	tInstructionType eType;
@@ -69,6 +74,8 @@ public:
 
 	tInstList collIfBranch;
 	tInstList collElseBranch;
+
+	bool bDelaySlotReordered;
 };
 
 bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, const std::string &strBinFile, tInstList &collInstList);

@@ -77,6 +77,14 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				}
 				break;
 			}
+			case IT_BNEL:
+			{
+				fprintf(pDestFile, "\n");
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "if(%s != %s)\n", getRegVarName(aInstruction.eRS).c_str(), getRegVarName(aInstruction.eRT).c_str());
+				bBranchAllowed = true;
+				break;
+			}
 			case IT_LUI:
 			{
 				doIndent(pDestFile, uDepth);
@@ -162,6 +170,8 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 					generateInstructionCode(pDestFile, aInstruction.collElseBranch, uDepth + 1);
 					fprintf(pDestFile, "%s}\n", getIndentStr(uDepth).c_str());
 				}
+
+				fprintf(pDestFile, "\n");
 			}
 			else
 			{

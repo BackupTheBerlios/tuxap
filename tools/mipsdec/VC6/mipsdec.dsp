@@ -97,6 +97,10 @@ SOURCE=..\mipsdec.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=..\optimize.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=..\register.cpp
 # End Source File
 # Begin Source File
@@ -118,6 +122,10 @@ SOURCE=..\common.h
 # Begin Source File
 
 SOURCE=..\instruction.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\optimize.h
 # End Source File
 # Begin Source File
 

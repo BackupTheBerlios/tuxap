@@ -1,6 +1,7 @@
 #include "symbols.h"
 #include "instruction.h"
 #include "codegen.h"
+#include "optimize.h"
 #include "common.h"
 
 int main(int argc, char **argv)
@@ -25,6 +26,10 @@ int main(int argc, char **argv)
 	tInstList collInstList;
 	
 	parseFunction(strFunction, collSymList, strBinaryFile, collInstList);
+	//dumpInstructions(collInstList);
+	resolveDelaySlots(collInstList);
+	//dumpInstructions(collInstList);
+	optimizeInstructions(collInstList);
 	//dumpInstructions(collInstList);
 	generateCode(stdout, collInstList);
 
