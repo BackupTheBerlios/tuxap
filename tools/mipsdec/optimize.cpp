@@ -328,6 +328,67 @@ static bool detectOnlyElseBranch(tInstList &collInstList)
 	return false;
 }
 
+static bool removeClosingJump(tInstList &collInstList, unsigned uJumpTarget)
+{
+	M_ASSERT(uJumpTarget != 0);
+	M_ASSERT(uJumpTarget != 0xFFFFFFFF);
+
+	tInstList::reverse_iterator itCurr = collInstList.rbegin();
+	tInstList::reverse_iterator itEnd = collInstList.rend();
+
+	if(itCurr != itEnd)
+	{
+		if(itCurr->uJumpAddress == uJumpTarget)
+		{
+			collInstList.pop_back();
+			return true;
+		}
+
+		if(removeClosingJump(itCurr->collIfBranch, uJumpTarget))
+		{
+			return true;
+		}
+
+		if(removeClosingJump(itCurr->collElseBranch, uJumpTarget))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/* Detect situations where a jumps at the end of a branch jumps to a   */
+/* target which is the next (outside) instruction after the branch     */
+/* Preconditions:                                                      */
+/* - Last instruction in the if/else branch                            */
+/* - Jump target directly follows the branch                           */
+static bool detectEndOfBranchJumps(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while((itCurr != itEnd) && ((itCurr + 1) != itEnd))
+	{
+		if(((itCurr->collIfBranch.size() > 0) || (itCurr->collElseBranch.size() > 0)) && ((itCurr + 1)->bIsJumpTarget))
+		{
+			if(removeClosingJump(itCurr->collIfBranch, (itCurr + 1)->uAddress))
+			{
+				return true;
+			}
+
+			if(removeClosingJump(itCurr->collElseBranch, (itCurr + 1)->uAddress))
+			{
+				return true;
+			}
+		}
+
+		itCurr++;
+	}
+
+	return false;
+}
+
 bool optimizeInstructions(tInstList &collInstList)
 {
 	if(reassembleSingleJumpBlocks(collInstList))
@@ -341,6 +402,11 @@ bool optimizeInstructions(tInstList &collInstList)
 	}
 	
 	if(detectOnlyElseBranch(collInstList))
+	{
+		return true;
+	}
+	
+	if(detectEndOfBranchJumps(collInstList))
 	{
 		return true;
 	}
