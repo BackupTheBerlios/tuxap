@@ -68,6 +68,13 @@ config MIPS_PB1550
 	select MIPS_DISABLE_OBSOLETE_IDE
 	select SYS_SUPPORTS_LITTLE_ENDIAN
 
+config MIPS_PB1200
+	bool "AMD Alchemy PB1200 board"
+	select SOC_AU1200
+	select DMA_NONCOHERENT
+	select MIPS_DISABLE_OBSOLETE_IDE
+	select SYS_SUPPORTS_LITTLE_ENDIAN
+
 config MIPS_DB1000
 	bool "AMD Alchemy DB1000 board"
 	select SOC_AU1000
@@ -93,6 +100,13 @@ config MIPS_DB1550
 	bool "AMD Alchemy DB1550 board"
 	select SOC_AU1550
 	select HW_HAS_PCI
+	select DMA_NONCOHERENT
+	select MIPS_DISABLE_OBSOLETE_IDE
+	select SYS_SUPPORTS_LITTLE_ENDIAN
+
+config MIPS_DB1200
+	bool "AMD Alchemy DB1200 board"
+	select SOC_AU1200
 	select DMA_NONCOHERENT
 	select MIPS_DISABLE_OBSOLETE_IDE
 	select SYS_SUPPORTS_LITTLE_ENDIAN
@@ -619,6 +633,7 @@ config TOSHIBA_JMR3927
 config TOSHIBA_RBTX4927
 	bool "Support for Toshiba TBTX49[23]7 board"
 	select DMA_NONCOHERENT
+	select HAS_TXX9_SERIAL
 	select HW_HAS_PCI
 	select I8259
 	select ISA
@@ -765,6 +780,7 @@ config MIPS_GT64120
 
 config MIPS_TX3927
 	bool
+	select HAS_TXX9_SERIAL
 
 config PCI_MARVELL
 	bool
@@ -785,6 +801,10 @@ config SOC_AU1500
 	select SOC_AU1X00
 
 config SOC_AU1550
+	bool
+	select SOC_AU1X00
+
+config SOC_AU1200
 	bool
 	select SOC_AU1X00
 
@@ -1408,6 +1428,23 @@ config MIPS32_N32
 config BINFMT_ELF32
 	bool
 	default y if MIPS32_O32 || MIPS32_N32
+
+config SECCOMP
+	bool "Enable seccomp to safely compute untrusted bytecode"
+	depends on PROC_FS && BROKEN
+	default y
+	help
+	  This kernel feature is useful for number crunching applications
+	  that may need to compute untrusted bytecode during their
+	  execution. By using pipes or other transports made available to
+	  the process as file descriptors supporting the read/write
+	  syscalls, it's possible to isolate those applications in
+	  their own address space using seccomp. Once seccomp is
+	  enabled via /proc/<pid>/seccomp, it cannot be disabled
+	  and the task is only allowed to execute a few safe syscalls
+	  defined by each seccomp mode.
+
+	  If unsure, say Y. Only embedded should say N here.
 
 config PM
 	bool "Power Management support (EXPERIMENTAL)"

@@ -189,9 +189,10 @@
 #define CPU_VR4133		56
 #define CPU_AU1550		57
 #define CPU_24K			58
-#define CPU_BCM3302		59
-#define CPU_BCM4710		60
-#define CPU_LAST		60
+#define CPU_AU1200		59
+#define CPU_BCM3302		60
+#define CPU_BCM4710		61
+#define CPU_LAST		61
 
 /*
  * ISA Level encodings
