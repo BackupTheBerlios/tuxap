@@ -144,6 +144,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				{
 					fprintf(pDestFile, "call UNKNOWN FUNCTION in %s (0x%08X);\n\n", getRegVarName(aInstruction.eRS).c_str(), uValue);
 				}
+				bBranchAllowed = true;
 				break;
 			}
 			case IT_LUI:
@@ -258,7 +259,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 			}
 			else
 			{
-				M_ASSERT(false);
+				//M_ASSERT(false);
 			}
 		}
 	}

@@ -2,6 +2,43 @@
 #include "instruction.h"
 #include "common.h"
 
+static bool delaySlotClash(const Instruction &aMasterInstruction, const Instruction &aDelaySlotInstruction)
+{
+	switch(aMasterInstruction.eFormat)
+	{
+		case IF_RSRTRD:
+			return (aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRS) ||
+					aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRT) ||
+					aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRD));
+		case IF_RSRT:
+		case IF_RSRTSI:
+		case IF_RSRTUI:
+			return (aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRS) || 
+					aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRT));
+		case IF_RSSI:
+		case IF_RS:
+			return aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRS);
+		case IF_RTUI:
+			return aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRT);
+		case IF_RTRDSA:
+		case IF_RTRDSEL:
+			return (aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRT) || 
+					aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRD));
+		case IF_RSRD:
+			return (aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRS) || 
+					aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRD));
+		case IF_RD:
+			return aDelaySlotInstruction.modifiesRegister(aMasterInstruction.eRD);
+			break;
+		case IF_NOARG:
+			return false;
+		case IF_UNKNOWN:
+		default:
+			M_ASSERT(false);
+			return false;
+	}
+}
+
 bool resolveDelaySlots(tInstList &collInstList)
 {
 	tInstList::iterator itCurr = collInstList.begin();
@@ -26,9 +63,19 @@ bool resolveDelaySlots(tInstList &collInstList)
 					break;
 				}
 				case IDS_UNCONDITIONAL:
-					/* Swap master and delay slot instruction */
-					itCurr->swap(*(itCurr + 1), false);
-					itCurr++;
+					if(delaySlotClash(*itCurr, *(itCurr + 1)))
+					{
+						/* Move delay slot instruction into if and else branch */
+						itCurr->collIfBranch.push_back(*(itCurr + 1));
+						itCurr->collElseBranch.push_back(*(itCurr + 1));
+						collInstList.erase(itCurr + 1);
+					}
+					else
+					{
+						/* Swap master and delay slot instruction */
+						itCurr->swap(*(itCurr + 1), false);
+						itCurr++;
+					}
 					break;
 				default:
 					M_ASSERT(false);
