@@ -87,6 +87,42 @@ static int hfc_usb_register_channels(struct hfcusb_data *ta);
 /* Hardware related functions                                                 */
 /******************************************************************************/
 
+static inline int hfc_usb_write_reg(hfcusb_data *hfc, u8 reg, u8 val)
+{
+	return usb_control_msg(hfc->dev, hfc->ctrl_out_pipe, HFC_REG_WR, 0x40, val, reg, NULL, 0, HFC_CTRL_TIMEOUT);
+}
+
+static inline int hfc_usb_read_reg(hfcusb_data *hfc, u8 reg, u8 *val)
+{
+	return usb_control_msg(hfc->dev, hfc->ctrl_in_pipe, HFC_REG_RD, 0xC0, 0, reg, val, sizeof(*val), HFC_CTRL_TIMEOUT);
+}
+
+static int hfc_usb_set_fifo_mode(hfcusb_data *hfc, u8 fifo_idx, u8 enable, u8 transparent)
+{
+	u8 val = 0;
+
+	if (fifo_idx >= HFCUSB_NUM_FIFOS) {
+		printk(HFC_USB_ERR "Invalid fifo idx=%d\n", fifo_idx);
+		return -EINVAL;
+	}
+
+	if ((fifo_idx == HFCUSB_D_TX) || (fifo_idx == HFCUSB_D_RX))
+		val |= 0x01 << 0;
+	
+	if (transparent)
+		val |= 0x01 << 1;
+	
+	if (enable)
+		val |= 0x02 << 2;
+
+	hfc_usb_write_reg(hfc, HFCUSB_FIFO, fifo_idx);	/* select the desired fifo */
+	hfc_usb_write_reg(hfc, HFCUSB_HDLC_PAR, ((fifo_idx <= HFCUSB_B2_RX) ? 0 : 2));	    // set 2 bit for D- & E-channel
+	hfc_usb_write_reg(hfc, HFCUSB_CON_HDLC, val);
+	hfc_usb_write_reg(hfc, HFCUSB_INC_RES_F, 2);	/* reset the fifo */
+	
+	return 0;
+}
+
 /***************************************************/
 /* write led data to auxport & invert if necessary */
 /***************************************************/
@@ -178,6 +214,117 @@ hfc_usb_handle_led(hfcusb_data *hfc, int event)
 	hfc_usb_write_led(hfc, led_state);
 }
 
+static void
+collect_rx_frame(usb_fifo *fifo, u8 *data, int len, int finish)
+{
+	hfcusb_data *hfc = fifo->hfc;
+
+	int transp_mode, fifon;
+
+	fifon = fifo->fifonum;
+	transp_mode=0;
+
+	if ((fifon < 4) && (hfc->b_mode[fifon / 2] == L1_MODE_TRANS))
+		transp_mode = TRUE;
+
+	//printk(KERN_INFO "HFC-USB: got %d bytes finish:%d max_size:%d fifo:%d\n",len,finish,fifo->max_size,fifon);
+	if (!fifo->skbuff)
+	{
+		// allocate sk buffer
+		fifo->skbuff = dev_alloc_skb(fifo->max_size + 3);
+		if (!fifo->skbuff) {
+			printk(HFC_USB_ERR "Can not allocate buffer (dev_alloc_skb) fifo:%d\n", fifon);
+			return;
+		}
+		
+	}
+
+	if (len && ((fifo->skbuff->len + len) < fifo->max_size))
+		memcpy(skb_put(fifo->skbuff,len),data,len);
+	else
+		printk(KERN_INFO "HCF-USB: got frame exceeded fifo->max_size:%d\n", fifo->max_size);
+
+	// give transparent data up, when 128 byte are available
+	if (transp_mode && fifo->skbuff->len >= 128)
+	{
+//FIXMEFSC		fifo->hif->l1l2(fifo->hif,PH_DATA | INDICATION,fifo->skbuff);
+		fifo->skbuff = NULL;  // buffer was freed from upper layer
+		return;
+	}
+
+	// we have a complete hdlc packet
+	if (finish) {
+		if (!fifo->skbuff->data[fifo->skbuff->len - 1]) {
+			skb_trim(fifo->skbuff,fifo->skbuff->len-3);  // remove CRC & status
+
+			//printk(KERN_INFO "HFC-USB: got frame %d bytes on fifo:%d\n",fifo->skbuff->len,fifon);
+
+//FIXMEFSC			if(fifon==HFCUSB_PCM_RX) fifo->hif->l1l2(fifo->hif,PH_DATA_E | INDICATION,fifo->skbuff);
+//FIXMEFSC			else fifo->hif->l1l2(fifo->hif,PH_DATA | INDICATION,fifo->skbuff);
+
+			fifo->skbuff = NULL;  // buffer was freed from upper layer
+		}
+		else
+		{
+			printk(KERN_INFO "HFC-USB: got frame %d bytes but CRC ERROR!!!\n",fifo->skbuff->len);
+
+			skb_trim(fifo->skbuff,0);  // clear whole buffer
+		}
+	}
+
+	// LED flashing only in HDLC mode
+	if (!transp_mode) {
+		if (fifon == HFCUSB_B1_RX)
+			hfc_usb_handle_led(hfc, LED_B1_DATA);
+		if (fifon == HFCUSB_B2_RX)
+			hfc_usb_handle_led(hfc, LED_B2_DATA);
+	}
+}
+
+static void
+hfc_usb_rx_complete(struct urb *urb, struct pt_regs *regs)
+{
+	usb_fifo *fifo = (usb_fifo *)urb->context;
+	hfcusb_data *hfc = fifo->hfc;
+	
+	printk(HFC_USB_INFO "RX event on fifo %d\n", fifo->fifonum);
+
+	int len;
+	u8 *buf;
+
+	urb->dev = hfc->dev;	/* security init */
+
+	if ((!fifo->active) || (urb->status)) {
+#ifdef VERBOSE_USB_DEBUG
+		printk(KERN_INFO "HFC-USB: RX-Fifo %i is going down (%i)\n", fifo->fifonum, urb->status);
+#endif
+		fifo->urb->interval = 0;	/* cancel automatic rescheduling */
+		if (fifo->skbuff) {
+			dev_kfree_skb_any(fifo->skbuff);
+			fifo->skbuff = NULL;
+		}
+
+		return;
+	}
+
+	len = urb->actual_length;
+	buf = fifo->buffer;
+
+	if (fifo->last_urblen != fifo->usb_packet_maxlen) {
+		// the threshold mask is in the 2nd status byte
+		hfc->threshold_mask = buf[1];
+		// the S0 state is in the upper half of the 1st status byte
+		state_handler(hfc, buf[0] >> 4);
+		// if we have more than the 2 status bytes -> collect data
+		if (len > 2)
+			collect_rx_frame(fifo, buf + 2, urb->actual_length - 2, buf[0] & 1);
+	} else {
+		collect_rx_frame(fifo, buf, urb->actual_length, 0);
+	}
+
+	fifo->last_urblen = urb->actual_length;
+}
+
 /* stops running iso chain and frees their pending urbs */
 static void 
 hfc_usb_stop_isoc_chain(usb_fifo *fifo)
@@ -226,8 +373,7 @@ hfc_usb_start_isoc_chain(usb_fifo *fifo, int num_packets_per_urb, usb_complete_t
 				memset(fifo->iso[i].buffer, 0, sizeof(fifo->iso[i].buffer));
 
 				// defining packet delimeters in fifo->buffer
-				for(packet_nr = 0; packet_nr < num_packets_per_urb; packet_nr++)
-				{
+				for(packet_nr = 0; packet_nr < num_packets_per_urb; packet_nr++) {
 					fifo->iso[i].purb->iso_frame_desc[packet_nr].offset = packet_nr * packet_size;
 					fifo->iso[i].purb->iso_frame_desc[packet_nr].length = packet_size;
 				}
@@ -238,7 +384,7 @@ hfc_usb_start_isoc_chain(usb_fifo *fifo, int num_packets_per_urb, usb_complete_t
 		err = usb_submit_urb(fifo->iso[i].purb, GFP_KERNEL);
 		fifo->active = (err == 0) ? 1 : 0;
 
-		if(err < 0) {
+		if (err < 0) {
 			printk(HFC_USB_ERR "Error submitting ISO URB %i (error = %d)\n",  i, err);
 			break;
 		}
@@ -259,7 +405,7 @@ hfc_usb_start_int_fifo(usb_fifo * fifo)
 	}
 
 	usb_fill_int_urb(fifo->urb, fifo->hfc->dev, fifo->pipe, fifo->buffer,
-				 fifo->usb_packet_maxlen, rx_complete, fifo, fifo->intervall);
+				 fifo->usb_packet_maxlen, hfc_usb_rx_complete, fifo, fifo->intervall);
 	fifo->active = 1;		/* must be marked active */
 	err = usb_submit_urb(fifo->urb, GFP_KERNEL);
 
@@ -306,6 +452,31 @@ hfc_usb_start_fifos(hfcusb_data *hfc)
 	return 0;
 }
 
+static void
+hfc_usb_stop_fifos(hfcusb_data *hfc)
+{
+	int i;
+
+	/* tell all fifos to terminate */
+	for (i = 0; i < HFCUSB_NUM_FIFOS; i++) {
+		if (hfc->fifos[i].transfer_mode == USB_ENDPOINT_XFER_ISOC) {
+			if (hfc->fifos[i].active > 0)
+	    			hfc_usb_stop_isoc_chain(&hfc->fifos[i]);
+		} else {
+			if (hfc->fifos[i].active > 0)
+				hfc->fifos[i].active = 0;
+
+			if (hfc->fifos[i].urb) {
+				usb_unlink_urb(hfc->fifos[i].urb);
+				usb_free_urb(hfc->fifos[i].urb);
+				hfc->fifos[i].urb = NULL;
+			}
+		}
+
+		hfc->fifos[i].active = 0;
+	}
+}
+
 /******************************************************************************/
 /* mISDN related functions                                                    */
 /******************************************************************************/
@@ -328,24 +499,141 @@ hfc_usb_l1hw(mISDNif_t *hif, struct sk_buff *skb)
 static int
 hfc_usb_l2l1(mISDNif_t *hif, struct sk_buff *skb)
 {
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
-	printk(HFC_USB_ERR "l2l1 called!\n");
+	bchannel_t	*bch;
+	int		ret = -EINVAL;
+	mISDN_head_t	*hh;
+
 	printk(HFC_USB_ERR "l2l1 called!\n");
 
-	return 0;
+	if ((!hif) || (!skb)) {
+		BUG();
+		return -EINVAL;
+	}
+
+	hh = mISDN_HEAD_P(skb);
+	bch = hif->fdata;
+
+	switch(hh->prim) {
+		case PH_DATA_REQ:
+			printk("PH_DATA_REQ\n");
+		case DL_DATA | REQUEST:
+			printk("DL_DATA | REQUEST\n");
+//#warning TODO: hier muss abgefragt werden, ob skb->len <= 0 ist, und ggf. ein -EINVAL zurückliefern, sonst wird zwar einmal confirmed, aber es regt sich nichts mehr. dies bitte auch für den d-kanal überdenken, sowie für alle andere kartentreiber.
+			if (bch->next_skb) {
+				printk(KERN_WARNING "%s: next_skb exist ERROR\n", __FUNCTION__);
+				return -EBUSY;
+			}
+
+			bch->inst.lock(bch->inst.data, 0);
+			if (test_and_set_bit(BC_FLG_TX_BUSY, &bch->Flag)) {
+				test_and_set_bit(BC_FLG_TX_NEXT, &bch->Flag);
+				bch->next_skb = skb;
+				bch->inst.unlock(bch->inst.data);
+				return 0;
+			} else {
+				bch->tx_len = skb->len;
+				memcpy(bch->tx_buf, skb->data, bch->tx_len);
+				bch->tx_idx = 0;
+				//hfcpci_fill_fifo(bch);
+				bch->inst.unlock(bch->inst.data);
+				if ((bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)	&& bch->dev)
+					hif = &bch->dev->rport.pif;
+				else
+					hif = &bch->inst.up;
+				skb_trim(skb, 0);
+				return if_newhead(hif, hh->prim | CONFIRM, hh->dinfo, skb);
+			}
+			break;
+		case PH_ACTIVATE | REQUEST:
+			printk("PH_ACTIVATE | REQUEST\n");
+		case DL_ESTABLISH | REQUEST:
+			printk("DL_ESTABLISH | REQUEST\n");
+			if (test_and_set_bit(BC_FLG_ACTIV, &bch->Flag))
+				ret = 0;
+			else {
+				bch->inst.lock(bch->inst.data, 0);
+				//ret = mode_hfcpci(bch, bch->channel,
+				//	bch->inst.pid.protocol[1]);
+				bch->inst.unlock(bch->inst.data);
+			}
+			if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
+				if (bch->dev)
+					if_link(&bch->dev->rport.pif,
+						hh->prim | CONFIRM, 0, 0, NULL, 0);
+			skb_trim(skb, 0);
+			return (if_newhead(&bch->inst.up, hh->prim | CONFIRM, ret, skb));
+		case PH_DEACTIVATE | REQUEST:
+			printk("PH_DEACTIVATE | REQUEST\n");
+		case DL_RELEASE | REQUEST:
+			printk("DL_RELEASE | REQUEST\n");
+		case MGR_DISCONNECT | REQUEST:
+			printk("MGR_DISCONNECT | REQUEST\n");
+			bch->inst.lock(bch->inst.data, 0);
+			if (test_and_clear_bit(BC_FLG_TX_NEXT, &bch->Flag)) {
+				dev_kfree_skb(bch->next_skb);
+				bch->next_skb = NULL;
+			}
+			test_and_clear_bit(BC_FLG_TX_BUSY, &bch->Flag);
+			//mode_hfcpci(bch, bch->channel, ISDN_PID_NONE);
+			test_and_clear_bit(BC_FLG_ACTIV, &bch->Flag);
+			bch->inst.unlock(bch->inst.data);
+			skb_trim(skb, 0);
+			if (hh->prim != (MGR_DISCONNECT | REQUEST)) {
+				if (bch->inst.pid.protocol[2] == ISDN_PID_L2_B_RAWDEV)
+					if (bch->dev)
+						if_link(&bch->dev->rport.pif,
+							hh->prim | CONFIRM, 0, 0, NULL, 0);
+				if (!if_newhead(&bch->inst.up, hh->prim | CONFIRM, 0, skb))
+					return(0);
+			}
+			ret = 0;
+			break;
+		case PH_CONTROL | REQUEST:
+			printk("PH_CONTROL | REQUEST\n");
+			bch->inst.lock(bch->inst.data, 0);
+			if (hh->dinfo == HW_TESTRX_RAW) {
+				//ret = set_hfcpci_rxtest(bch, ISDN_PID_L1_B_64TRANS, skb);
+			} else if (hh->dinfo == HW_TESTRX_HDLC) {
+				//ret = set_hfcpci_rxtest(bch, ISDN_PID_L1_B_64HDLC, skb);
+			} else if (hh->dinfo == HW_TESTRX_OFF) {
+				//mode_hfcpci(bch, bch->channel, ISDN_PID_NONE);
+				ret = 0;
+			} else
+				ret = -EINVAL;
+			bch->inst.unlock(bch->inst.data);
+			if (!ret) {
+				skb_trim(skb, 0);
+				if (!if_newhead(&bch->inst.up, hh->prim | CONFIRM, hh->dinfo, skb))
+					return(0);
+			}
+			break;
+		default:
+			printk(KERN_WARNING "%s: unknown prim(%x)\n", __FUNCTION__, hh->prim);
+			ret = -EINVAL;
+		}
+
+	if (!ret)
+		dev_kfree_skb(skb);
+
+	return ret;
+}
+
+static void
+hfc_usb_dhw(dchannel_t *dch)
+{
+	printk(HFC_USB_ERR "dhw called!\n");
+	printk(HFC_USB_ERR "dhw called!\n");
+	printk(HFC_USB_ERR "dhw called!\n");
+	printk(HFC_USB_ERR "dhw called!\n");
+}
+
+static void
+hfc_usb_dbusy_timer(hfcusb_data *hfc)
+{
+	printk(HFC_USB_ERR "dbusy_timer called!\n");
+	printk(HFC_USB_ERR "dbusy_timer called!\n");
+	printk(HFC_USB_ERR "dbusy_timer called!\n");
+	printk(HFC_USB_ERR "dbusy_timer called!\n");
 }
 
 static int
@@ -436,7 +724,7 @@ hfc_usb_manager(void * data, u_int prim, void *arg)
 		break;
 	    case MGR_SETIF | REQUEST:
 	    case MGR_SETIF | INDICATION:
-		if (channel==2)
+		if (channel == 2)
 			return mISDN_SetIF(inst, arg, prim, hfc_usb_l1hw, NULL,
 				&hfc->dch);
 		else
@@ -500,20 +788,25 @@ hfc_usb_unlock_dev(void *data)
 }
 
 static int 
-hfc_usb_init_dchannel(hfcusb_data *ta)
+hfc_usb_init_dchannel(hfcusb_data *hfc)
 {
-	dchannel_t *dch = &ta->dch;
+	dchannel_t *dch = &hfc->dch;
 
 	dch->debug = debug;
 	dch->inst.lock = hfc_usb_lock_dev;
 	dch->inst.unlock = hfc_usb_unlock_dev;
 
-	mISDN_init_instance(&dch->inst, &hfc_usb, ta);
+	mISDN_init_instance(&dch->inst, &hfc_usb, hfc);
 
 	dch->inst.pid.layermask = ISDN_LAYER(0);
 	sprintf(dch->inst.name, "HFC-USB%d", ++HFC_cnt);
 
 	mISDN_init_dch(dch);
+
+	hfc->dch.hw_bh = hfc_usb_dhw;
+	hfc->dch.dbusytimer.function = (void *)hfc_usb_dbusy_timer;
+	hfc->dch.dbusytimer.data = (long)&hfc->dch;
+	init_timer(&hfc->dch.dbusytimer);
 
 	return 0;
 }
@@ -543,20 +836,39 @@ hfc_usb_init_bchannels(hfcusb_data *ta)
 			bch->dev->wport.pif.func = hfc_usb_l2l1;
 			bch->dev->wport.pif.fdata = bch;
 		}
+
+//		hc->chanlimit = 2;
+//		mode_hfcpci(&hc->bch[0], 1, -1);
+//		mode_hfcpci(&hc->bch[1], 2, -1);
 	}
 
 	return 0;
 }
 
 static int 
-hfc_usb_register_channels(hfcusb_data *ta)
+hfc_usb_register_channels(hfcusb_data *hfc)
 {
-	dchannel_t *dch = &ta->dch;
+	dchannel_t *dch = &hfc->dch;
 	int err;
 	int i;
 	mISDN_pid_t pid;
 
-	mISDN_set_dchannel_pid(&pid, ta->protocol, ta->layermask);
+	mISDN_set_dchannel_pid(&pid, hfc->protocol, hfc->layermask);
+
+	if (hfc->protocol & 0x10) {
+		hfc->dch.inst.pid.protocol[0] = ISDN_PID_L0_NT_S0;
+		hfc->dch.inst.pid.protocol[1] = ISDN_PID_L1_NT_S0;
+		pid.protocol[0] = ISDN_PID_L0_NT_S0;
+		pid.protocol[1] = ISDN_PID_L1_NT_S0;
+		hfc->dch.inst.pid.layermask |= ISDN_LAYER(1);
+		pid.layermask |= ISDN_LAYER(1);
+		if (hfc->layermask & ISDN_LAYER(2))
+			pid.protocol[2] = ISDN_PID_L2_LAPD_NET;
+		//card->hw.nt_mode = 1;
+	} else {
+		hfc->dch.inst.pid.protocol[0] = ISDN_PID_L0_TE_S0;
+		//card->hw.nt_mode = 0;
+	}
 
 	if ((err = hfc_usb.ctrl(NULL, MGR_NEWSTACK | REQUEST, &dch->inst))) {
 		printk(HFC_USB_ERR "MGR_NEWSTACK dch (error = %d)\n", err);
@@ -564,7 +876,7 @@ hfc_usb_register_channels(hfcusb_data *ta)
 	}
 
 	for (i = 0; i < 2; i++) {
-		if ((err = hfc_usb.ctrl(dch->inst.st, MGR_NEWSTACK | REQUEST, &ta->bch[i].inst))) {
+		if ((err = hfc_usb.ctrl(dch->inst.st, MGR_NEWSTACK | REQUEST, &hfc->bch[i].inst))) {
 			printk(HFC_USB_ERR "MGR_NEWSTACK bch (error = %d)\n", err);
 			hfc_usb.ctrl(dch->inst.st, MGR_DELSTACK | REQUEST, NULL);
 			return err;
@@ -618,14 +930,14 @@ hfc_usb_misdn_unregister(void)
 }
 
 static int 
-hfc_usb_hw_init(hfcusb_data *hfc, u32 packet_size, u32 iso_packet_size)
+hfc_usb_init_hw(hfcusb_data *hfc, u32 packet_size, u32 iso_packet_size)
 {
 	usb_fifo *fifo;
 	int i, err;
 	u_char b;
 	
 	/* check the chip id */
-	if (read_usb(hfc, HFCUSB_CHIP_ID, &b) != 1) {
+	if (hfc_usb_read_reg(hfc, HFCUSB_CHIP_ID, &b) != 1) {
 		printk(HFC_USB_ERR "Can not read chip id\n");
 		return -EFAULT;
 	}
@@ -645,64 +957,68 @@ hfc_usb_hw_init(hfcusb_data *hfc, u32 packet_size, u32 iso_packet_size)
 
 	printk(KERN_INFO "usb_init usb_set_interface return %d\n", err);
 	/* now we initialize the chip */
-	write_usb(hfc, HFCUSB_CIRM, 8);	    // do reset
-	write_usb(hfc, HFCUSB_CIRM, 0x10);	// aux = output, reset off
+	hfc_usb_write_reg(hfc, HFCUSB_CIRM, 8);	    // do reset
+	hfc_usb_write_reg(hfc, HFCUSB_CIRM, 0x10);	// aux = output, reset off
 
 	// set USB_SIZE to match the the wMaxPacketSize for INT or BULK transfers
-	write_usb(hfc, HFCUSB_USB_SIZE, (packet_size / 8) | ((packet_size / 8) << 4));
+	hfc_usb_write_reg(hfc, HFCUSB_USB_SIZE, (packet_size / 8) | ((packet_size / 8) << 4));
 
 	// set USB_SIZE_I to match the the wMaxPacketSize for ISO transfers
-	write_usb(hfc, HFCUSB_USB_SIZE_I, iso_packet_size);
+	hfc_usb_write_reg(hfc, HFCUSB_USB_SIZE_I, iso_packet_size);
 
 	/* enable PCM/GCI master mode */
-	write_usb(hfc, HFCUSB_MST_MODE1, 0);	/* set default values */
-	write_usb(hfc, HFCUSB_MST_MODE0, 1);	/* enable master mode */
+	hfc_usb_write_reg(hfc, HFCUSB_MST_MODE1, 0);	/* set default values */
+	hfc_usb_write_reg(hfc, HFCUSB_MST_MODE0, 1);	/* enable master mode */
 
 	/* init the fifos */
-	write_usb(hfc, HFCUSB_F_THRES, (HFCUSB_TX_THRESHOLD/8) |((HFCUSB_RX_THRESHOLD/8) << 4));
+	hfc_usb_write_reg(hfc, HFCUSB_F_THRES, (HFCUSB_TX_THRESHOLD / 8) | ((HFCUSB_RX_THRESHOLD / 8) << 4));
 
 	fifo = hfc->fifos;
-	for(i = 0; i < HFCUSB_NUM_FIFOS; i++)
-	{
-		write_usb(hfc, HFCUSB_FIFO, i);	/* select the desired fifo */
+	for(i = 0; i < HFCUSB_NUM_FIFOS; i++) {
 		fifo[i].skbuff = NULL;	/* init buffer pointer */
 		fifo[i].max_size = (i <= HFCUSB_B2_RX) ? MAX_BCH_SIZE : MAX_DFRAME_LEN;
-		fifo[i].last_urblen=0;
-		write_usb(hfc, HFCUSB_HDLC_PAR, ((i <= HFCUSB_B2_RX) ? 0 : 2));	    // set 2 bit for D- & E-channel
-		write_usb(hfc, HFCUSB_CON_HDLC, ((i==HFCUSB_D_TX) ? 0x09 : 0x08));	// rx hdlc, enable IFF for D-channel
-		write_usb(hfc, HFCUSB_INC_RES_F, 2);	/* reset the fifo */
+		fifo[i].last_urblen = 0;
+		
+		if ((err = hfc_usb_set_fifo_mode(hfc, i, 1, 0)))
+			printk(HFC_USB_ERR "Can't set FIFO mode for idx=%d, result=%d\n", i, err);
 	}
 
-	write_usb(hfc, HFCUSB_CLKDEL, 0x0f);	 /* clock delay value */
-	write_usb(hfc, HFCUSB_STATES, 3 | 0x10); /* set deactivated mode */
-	write_usb(hfc, HFCUSB_STATES, 3);	     /* enable state machine */
+	hfc_usb_write_reg(hfc, HFCUSB_CLKDEL, 0x0f);	 /* clock delay value */
+	hfc_usb_write_reg(hfc, HFCUSB_STATES, 3 | 0x10); /* set deactivated mode */
+	hfc_usb_write_reg(hfc, HFCUSB_STATES, 3);	     /* enable state machine */
 
-	write_usb(hfc, HFCUSB_SCTRL_R, 0);	     /* disable both B receivers */
-	write_usb(hfc, HFCUSB_SCTRL, 0x40);	     /* disable B transmitters + capacitive mode */
+	hfc_usb_write_reg(hfc, HFCUSB_SCTRL_R, 0);	     /* disable both B receivers */
+	hfc_usb_write_reg(hfc, HFCUSB_SCTRL, 0x40);	     /* disable B transmitters + capacitive mode */
 
 	// set both B-channel to not connected
-	hfc->b_mode[0]=L1_MODE_NULL;
-	hfc->b_mode[1]=L1_MODE_NULL;
+	hfc->b_mode[0] = L1_MODE_NULL;
+	hfc->b_mode[1] = L1_MODE_NULL;
 
-	hfc->l1_activated=FALSE;
-	hfc->led_state=0;
-	hfc->led_new_data=0;
+	hfc->l1_activated = FALSE;
+	hfc->led_state = 0;
+	hfc->led_new_data = 0;
 
+#if 0
 	/* init the t3 timer */
 	init_timer(&hfc->t3_timer);
-	hfc->t3_timer.data = (long) hfc;
-	hfc->t3_timer.function = (void *) l1_timer_expire_t3;
+	hfc->t3_timer.data = (long)hfc;
+	hfc->t3_timer.function = (void *)l1_timer_expire_t3;
+
 	/* init the t4 timer */
 	init_timer(&hfc->t4_timer);
-	hfc->t4_timer.data = (long) hfc;
-	hfc->t4_timer.function = (void *) l1_timer_expire_t4;
+	hfc->t4_timer.data = (long)hfc;
+	hfc->t4_timer.function = (void *)l1_timer_expire_t4;
+#endif
+
 	/* init the led timer */
 	init_timer(&hfc->led_timer);
 	hfc->led_timer.data = (long)hfc;
 	hfc->led_timer.function = (void *)hfc_usb_led_timer;
+
 	// trigger 4 hz led timer
 	hfc->led_timer.expires = jiffies + (LED_TIME * HZ) / 1000;
-	if(!timer_pending(&hfc->led_timer)) add_timer(&hfc->led_timer);
+	if (!timer_pending(&hfc->led_timer))
+		add_timer(&hfc->led_timer);
 
 	// init the background machinery for control requests
 	hfc->ctrl_read.bRequestType = 0xc0;
@@ -711,7 +1027,8 @@ hfc_usb_hw_init(hfcusb_data *hfc, u32 packet_size, u32 iso_packet_size)
 	hfc->ctrl_write.bRequestType = 0x40;
 	hfc->ctrl_write.bRequest = 0;
 	hfc->ctrl_write.wLength = 0;
-	usb_fill_control_urb(hfc->ctrl_urb, hfc->dev, hfc->ctrl_out_pipe,(u_char *) & hfc->ctrl_write, NULL, 0, ctrl_complete, hfc);
+
+//	usb_fill_control_urb(hfc->ctrl_urb, hfc->dev, hfc->ctrl_out_pipe, (u_char *)&hfc->ctrl_write, NULL, 0, ctrl_complete, hfc);
 					
 	/* Init All Fifos */
 	for(i = 0; i < HFCUSB_NUM_FIFOS; i++)
@@ -725,17 +1042,25 @@ hfc_usb_hw_init(hfcusb_data *hfc, u32 packet_size, u32 iso_packet_size)
 	lock_HW_init(&hfc->lock);
 
 #warning TODO: HACK! HACK!	
+#if 0
 	hfc->protocol = 0x12;
-	hfc->layermask = 3;
+	hfc->layermask = 0x03;
+#else
+	hfc->protocol = 0x02;
+	hfc->layermask = 0x0F;
+#endif
 	
-	hfc_usb_init_dchannel(hfc);
-	hfc_usb_init_bchannels(hfc);
-	hfc_usb_register_channels(hfc);
-	hfc_usb_start_fifos(hfc);
-
-	hfc_usb_handle_led(hfc,LED_POWER_ON);
+	hfc_usb_handle_led(hfc, LED_POWER_ON);
 
 	return 0;
+}
+
+static void 
+hfc_usb_deinit_hw(hfcusb_data *hfc)
+{
+	/* Remove timers */
+	if (timer_pending(&hfc->led_timer))
+		del_timer(&hfc->led_timer);
 }
 
 /******************************************************************************/
@@ -760,7 +1085,7 @@ static struct usb_device_id hfc_usb_id_table[] = {
 };
 
 // this array represents all endpoints possible in the HCF-USB
-// the last 2 entries are the configuration number and the minimum interval for Interrupt endpoints
+// the last entry is the the minimum interval for Interrupt endpoints
 static int hfc_usb_ep_cfg[][17]=
 {
 	// INT in, ISO out config
@@ -785,15 +1110,16 @@ get_ep_cfg_idx(struct usb_host_endpoint *ep)
 }
 
 static int
-hfc_usb_init_dev(hfcusb_data *hfc, struct usb_interface *intf, int alt_idx, int cfg_idx)
+hfc_usb_init_usb(hfcusb_data *hfc, struct usb_interface *intf, int alt_idx, int cfg_idx, int *packet_size, int *iso_packet_size)
 {
 	struct usb_host_endpoint *ep;
 	int ep_cfg_idx;
 	int ep_idx;
 	usb_fifo *fifo;
 	struct usb_host_interface *host_if = &intf->altsetting[alt_idx];
-	u32 iso_packet_size = 0;
-	u32 packet_size = 0;
+	
+	*packet_size = 0;
+	*iso_packet_size = 0;
 
 	for (ep_idx = 0; ep_idx < host_if->desc.bNumEndpoints; ep_idx++) {
 		ep = &host_if->endpoint[ep_idx];
@@ -807,21 +1133,21 @@ hfc_usb_init_dev(hfcusb_data *hfc, struct usb_interface *intf, int alt_idx, int 
 		switch(ep->desc.bmAttributes & USB_ENDPOINT_XFERTYPE_MASK) {
 			case USB_ENDPOINT_XFER_INT:
 				fifo->pipe = usb_rcvintpipe(hfc->dev, ep->desc.bEndpointAddress);
-				packet_size = ep->desc.wMaxPacketSize;
+				*packet_size = ep->desc.wMaxPacketSize;
 				break;
 			case USB_ENDPOINT_XFER_BULK:
 				if (ep->desc.bEndpointAddress & USB_DIR_IN)
 					fifo->pipe = usb_rcvbulkpipe(hfc->dev, ep->desc.bEndpointAddress);
 				else
 					fifo->pipe = usb_sndbulkpipe(hfc->dev, ep->desc.bEndpointAddress);
-				packet_size = ep->desc.wMaxPacketSize;
+				*packet_size = ep->desc.wMaxPacketSize;
 				break;
 			case USB_ENDPOINT_XFER_ISOC:
 				if (ep->desc.bEndpointAddress & USB_DIR_IN)
 					fifo->pipe = usb_rcvisocpipe(hfc->dev, ep->desc.bEndpointAddress);
 				else
 					fifo->pipe = usb_sndisocpipe(hfc->dev, ep->desc.bEndpointAddress);
-				iso_packet_size = ep->desc.wMaxPacketSize;
+				*iso_packet_size = ep->desc.wMaxPacketSize;
 				break;
 			default:
 				fifo->pipe = 0;
@@ -842,26 +1168,21 @@ hfc_usb_init_dev(hfcusb_data *hfc, struct usb_interface *intf, int alt_idx, int 
 	hfc->ctrl_out_pipe = usb_sndctrlpipe(hfc->dev, 0);
 	hfc->ctrl_urb = usb_alloc_urb(0, GFP_KERNEL);
 
-	printk(HFC_USB_INFO "Detected \"%s\" configuration: %s (if=%d alt=%d)\n", "", "", hfc->if_used, hfc->alt_used);
-
-	/* init the chip and register the driver */
-	if (hfc_usb_hw_init(hfc, packet_size, iso_packet_size)) {
-		if (hfc->ctrl_urb) {
-			usb_unlink_urb(hfc->ctrl_urb);
-			usb_free_urb(hfc->ctrl_urb);
-			hfc->ctrl_urb = NULL;
-		}
-		kfree(hfc);
-		return -EIO;
-	}
-
 	usb_set_intfdata(intf, hfc);
 
 	return 0;
 }
 
-static int 
-hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
+static void
+hfc_usb_deinit_usb(hfcusb_data *hfc)
+{
+	usb_unlink_urb(hfc->ctrl_urb);
+	usb_free_urb(hfc->ctrl_urb);
+	hfc->ctrl_urb = NULL;
+}
+
+static int
+hfc_usb_scan_intf(struct usb_interface *intf, int *res_alt_idx, int *res_cfg_idx)
 {
 	int alt_idx;
 	int cfg_idx;
@@ -869,7 +1190,6 @@ hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	int *ep_cfg;
 	int ep_cfg_idx;
 	int ep_idx;
-	hfcusb_data *hfc;
 	struct usb_host_interface *host_if;
 	int num_valid_ep;
 	
@@ -896,19 +1216,12 @@ hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 				num_valid_ep++;
 			}
 			
-			/* Found valid configuration - initialize device */
+			/* Found valid configuration */
 			if (num_valid_ep) {
-				if (!(hfc = kmalloc(sizeof(*hfc), GFP_KERNEL)))
-					return -ENOMEM;
-
-				memset(hfc, 0, sizeof(*hfc));
-
-				hfc->dev = interface_to_usbdev(intf);
-				hfc->led = &hfc_led_info[id->driver_info];
-				hfc->if_used = host_if->desc.bInterfaceNumber;
-				hfc->alt_used = alt_idx;
-
-				return hfc_usb_init_dev(hfc, intf, alt_idx, cfg_idx);
+				*res_alt_idx = alt_idx;
+				*res_cfg_idx = cfg_idx;
+				
+				return 0;
 			}
 		}
 	}
@@ -916,10 +1229,71 @@ hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	return -EINVAL;
 }
 
+static int 
+hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
+{
+	int alt_idx;
+	int cfg_idx;
+	int err;
+	hfcusb_data *hfc;
+	int iso_packet_size;
+	int packet_size;
+
+	/* Try to locate usable alt and cfg index */
+	if ((err = hfc_usb_scan_intf(intf, &alt_idx, &cfg_idx)))
+		return err;
+
+	if (!(hfc = kmalloc(sizeof(*hfc), GFP_KERNEL)))
+		return -ENOMEM;
+
+	memset(hfc, 0, sizeof(*hfc));
+
+	hfc->dev = interface_to_usbdev(intf);
+	hfc->led = &hfc_led_info[id->driver_info];
+	hfc->if_used = intf->altsetting[alt_idx].desc.bInterfaceNumber;
+	hfc->alt_used = alt_idx;
+
+	/* init usb settings */
+	if ((err = hfc_usb_init_usb(hfc, intf, alt_idx, cfg_idx, &packet_size, &iso_packet_size))) {
+		kfree(hfc);
+		return err;
+	}
+
+	/* init the chip */
+	if ((err = hfc_usb_init_hw(hfc, packet_size, iso_packet_size))) {
+		hfc_usb_deinit_usb(hfc);
+		kfree(hfc);
+		return err;
+	}
+
+	if ((err = hfc_usb_start_fifos(hfc))) {
+		hfc_usb_deinit_hw(hfc);
+		hfc_usb_deinit_usb(hfc);
+		kfree(hfc);
+		return err;
+	}
+
+//	hfc_usb_init_dchannel(hfc);
+//	hfc_usb_init_bchannels(hfc);
+//	hfc_usb_register_channels(hfc);
+
+	return 0;
+}
+
 static void 
 hfc_usb_disconnect(struct usb_interface *intf)
 {
-	hfc_usb_disconnect_old(intf);
+	hfcusb_data *hfc = usb_get_intfdata(intf);
+
+	printk(HFC_USB_INFO "Device disconnect\n");
+	
+	usb_set_intfdata(intf, NULL);
+
+	hfc_usb_stop_fifos(hfc);
+	hfc_usb_deinit_hw(hfc);
+	hfc_usb_deinit_usb(hfc);
+
+	kfree(hfc);
 }
 
 static struct usb_driver hfc_usb_driver = {

@@ -39,4 +39,7 @@ struct led_info {
 
 #define HFC_USB_DEVICE(vendor_id, product_id, led_info_idx) USB_DEVICE(vendor_id, product_id), .driver_info = led_info_idx
 
+#define HFC_REG_WR	0x0000
+#define HFC_REG_RD	0x0001
+
 #endif
