@@ -389,7 +389,7 @@ static bool detectEndOfBranchJumps(tInstList &collInstList)
 	return false;
 }
 
-bool optimizeInstructions(tInstList &collInstList)
+bool optimizeInstructions(tInstList &collInstList, unsigned uCompletePassesDone)
 {
 	if(reassembleSingleJumpBlocks(collInstList))
 	{

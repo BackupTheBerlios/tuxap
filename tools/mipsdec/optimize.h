@@ -4,6 +4,6 @@
 #include "instruction.h"
 
 bool resolveDelaySlots(tInstList &collInstList);
-bool optimizeInstructions(tInstList &collInstList);
+bool optimizeInstructions(tInstList &collInstList, unsigned uCompletePassesDone);
 
 #endif

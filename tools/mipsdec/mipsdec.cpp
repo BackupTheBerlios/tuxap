@@ -35,11 +35,18 @@ int main(int argc, char **argv)
 	resolveDelaySlots(collInstList);
 	//dumpInstructions(collInstList);
 
-	do {
-		updateJumpTargets(collInstList);
-		//dumpInstructions(collInstList);
-	} 
-	while(optimizeInstructions(collInstList));
+	unsigned uCompletePassesDone = 0;
+
+	while(uCompletePassesDone < 2)
+	{
+		do {
+			updateJumpTargets(collInstList);
+			//dumpInstructions(collInstList);
+		} 
+		while(optimizeInstructions(collInstList, uCompletePassesDone));
+
+		uCompletePassesDone++;
+	}
 
 	updateJumpTargets(collInstList);
 	//dumpInstructions(collInstList);
