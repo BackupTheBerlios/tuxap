@@ -84,7 +84,8 @@ class Instruction
 {
 public:
 	Instruction(void) :
-			bDelaySlotReordered(false)
+			bDelaySlotReordered(false),
+			bIgnoreJump(false)
 	{
 	}
 
@@ -112,6 +113,7 @@ public:
 	tInstList collElseBranch;
 
 	bool bDelaySlotReordered;
+	bool bIgnoreJump;
 	bool bIsJumpTarget;
 	
 private:
