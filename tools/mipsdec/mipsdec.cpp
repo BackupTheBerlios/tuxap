@@ -35,7 +35,7 @@ int main(int argc, char **argv)
 
 	while(1)
 	{
-		Sleep(100);
+//		Sleep(100);
 	}
 	
 	return 0;

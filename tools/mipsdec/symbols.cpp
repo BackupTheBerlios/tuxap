@@ -1,4 +1,5 @@
 #include "symbols.h"
+#include "common.h"
 
 bool parseSymFile(const std::string &strSymFile, tSymList &collSymList)
 {
