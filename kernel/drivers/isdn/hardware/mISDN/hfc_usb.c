@@ -300,6 +300,10 @@ hfc_usb_process_state(hfcusb_data *hfc, u8 new_state)
 
 	switch(new_state) {
 		case 3:
+			hfc->l1_activated = 0;
+			hfc_usb_handle_led(hfc, LED_S0_OFF);
+			break;
+		case 6:
 			break;
 		case 7:
 			hfc_usb_set_statemachine(hfc, 1);
@@ -314,136 +318,62 @@ hfc_usb_process_state(hfcusb_data *hfc, u8 new_state)
 	hfc->l1_state = new_state;
 }
 
-#if 0
-static void
-collect_rx_frame(usb_fifo *fifo, u8 *data, int len, int finish)
+#include "hfc_usb_old.c"
+
+static void 
+hfc_usb_process_buf(usb_fifo *fifo, unsigned char *buf, unsigned int len, int finished)
 {
-	hfcusb_data *hfc = fifo->hfc;
+//	hfcusb_data *hfc = fifo->hfc;
 
-	int transp_mode, fifon;
+	printk(HFC_USB_DEBUG "Frame data of FIFO %d (%d->%d bytes)\n", fifo->num, len, fifo->skbuff->len);
 
-	fifon = fifo->fifonum;
-	transp_mode=0;
+	if (len)
+		memcpy(skb_put(fifo->skbuff, len), buf, len);
 
-	if ((fifon < 4) && (hfc->b_mode[fifon / 2] == L1_MODE_TRANS))
-		transp_mode = TRUE;
-
-	//printk(KERN_INFO "HFC-USB: got %d bytes finish:%d max_size:%d fifo:%d\n",len,finish,fifo->max_size,fifon);
-	if (!fifo->skbuff)
-	{
-		// allocate sk buffer
-		fifo->skbuff = dev_alloc_skb(fifo->max_size + 3);
-		if (!fifo->skbuff) {
-			printk(HFC_USB_ERR "Can not allocate buffer (dev_alloc_skb) fifo:%d\n", fifon);
-			return;
-		}
-		
-	}
-
-	if (len && ((fifo->skbuff->len + len) < fifo->max_size))
-		memcpy(skb_put(fifo->skbuff,len),data,len);
-	else
-		printk(KERN_INFO "HCF-USB: got frame exceeded fifo->max_size:%d\n", fifo->max_size);
-
-	// give transparent data up, when 128 byte are available
-	if (transp_mode && fifo->skbuff->len >= 128)
-	{
-//FIXMEFSC		fifo->hif->l1l2(fifo->hif,PH_DATA | INDICATION,fifo->skbuff);
-		fifo->skbuff = NULL;  // buffer was freed from upper layer
-		return;
-	}
-
-	// we have a complete hdlc packet
-	if (finish) {
-		if (!fifo->skbuff->data[fifo->skbuff->len - 1]) {
-			skb_trim(fifo->skbuff,fifo->skbuff->len-3);  // remove CRC & status
-
-			//printk(KERN_INFO "HFC-USB: got frame %d bytes on fifo:%d\n",fifo->skbuff->len,fifon);
-
-//FIXMEFSC			if(fifon==HFCUSB_PCM_RX) fifo->hif->l1l2(fifo->hif,PH_DATA_E | INDICATION,fifo->skbuff);
-//FIXMEFSC			else fifo->hif->l1l2(fifo->hif,PH_DATA | INDICATION,fifo->skbuff);
-
-			fifo->skbuff = NULL;  // buffer was freed from upper layer
-		}
-		else
-		{
-			printk(KERN_INFO "HFC-USB: got frame %d bytes but CRC ERROR!!!\n",fifo->skbuff->len);
-
-			skb_trim(fifo->skbuff,0);  // clear whole buffer
-		}
-	}
-
-	// LED flashing only in HDLC mode
-	if (!transp_mode) {
-		if (fifon == HFCUSB_B1_RX)
-			hfc_usb_handle_led(hfc, LED_B1_DATA);
-		if (fifon == HFCUSB_B2_RX)
-			hfc_usb_handle_led(hfc, LED_B2_DATA);
+#warning TODO: Handle transparent data
+	
+	if ((finished) /*|| (hfc->is_transparent[])*/) {
+		printk(HFC_USB_DEBUG "Got complete frame of FIFO %d (%d->%d bytes)\n", fifo->num, len, fifo->skbuff->len);
+		// Pass skb to upper layer...
+		skb_trim(fifo->skbuff, 0);
 	}
 }
 
-static void
-hfc_usb_rx_complete_old(struct urb *urb, struct pt_regs *regs)
+static void 
+hfc_usb_process_data(usb_fifo *fifo, unsigned char *buf, unsigned int len)
 {
-	usb_fifo *fifo = (usb_fifo *)urb->context;
 	hfcusb_data *hfc = fifo->hfc;
-	
-	printk(HFC_USB_INFO "RX event on fifo %d\n", fifo->fifonum);
 
-	int len;
-	u8 *buf;
-
-	urb->dev = hfc->dev;	/* security init */
-
-	if ((!fifo->active) || (urb->status)) {
-#ifdef VERBOSE_USB_DEBUG
-		printk(KERN_INFO "HFC-USB: RX-Fifo %i is going down (%i)\n", fifo->fifonum, urb->status);
-#endif
-		fifo->urb->interval = 0;	/* cancel automatic rescheduling */
-		if (fifo->skbuff) {
-			dev_kfree_skb_any(fifo->skbuff);
-			fifo->skbuff = NULL;
-		}
-
-		return;
-	}
-
-	len = urb->actual_length;
-	buf = fifo->buffer;
-
-	if (fifo->last_urblen != fifo->usb_packet_maxlen) {
-		//if ((buf[0] >> 4) == 3) {
-		//	printk(HFC_USB_INFO "Activating L1\n");
-		//	hfc_usb_set_statemachine(hfc, 1);
-		//}
-
-		// the threshold mask is in the 2nd status byte
-		hfc->threshold_mask = buf[1];
-		// the S0 state is in the upper half of the 1st status byte
-		state_handler(hfc, buf[0] >> 4);
-		// if we have more than the 2 status bytes -> collect data
-		if (len > 2) {
-			printk(HFC_USB_INFO "RX data (end)\n");
-			collect_rx_frame(fifo, buf + 2, urb->actual_length - 2, buf[0] & 1);
-		}
+	if (fifo->got_hdr) {
+		fifo->got_hdr = (len == fifo->usb_packet_maxlen);
+		printk(HFC_USB_DEBUG "Got %d URB bytes (continued, fin=%d, got_hdr=%d)\n", len, fifo->hdlc_complete, fifo->got_hdr);
+		hfc_usb_process_buf(fifo, buf, len, fifo->hdlc_complete && !fifo->got_hdr);
 	} else {
-		printk(HFC_USB_INFO "RX data (continued)\n");
-		collect_rx_frame(fifo, buf, urb->actual_length, 0);
-	}
+		if (len < 2) {
+			printk(HFC_USB_ERR "Received short frame (len < 2) while buffer empty\n");
+			return;
+		}
+		
+		hfc_usb_process_state(hfc, buf[0] >> 4);
+		hfc->threshold_mask = buf[1];
 
-	fifo->last_urblen = urb->actual_length;
+		if (len > 2) {
+			fifo->got_hdr = (len == fifo->usb_packet_maxlen);
+			fifo->hdlc_complete = buf[0] & 0x01;
+			printk(HFC_USB_DEBUG "Got %d URB bytes (begin, fin=%d, got_hdr=%d)\n", len, fifo->hdlc_complete, fifo->got_hdr);
+			hfc_usb_process_buf(fifo, &buf[2], len - 2, fifo->hdlc_complete && !fifo->got_hdr);
+		}
+	}
 }
 
 static void
 hfc_usb_rx_complete(struct urb *urb, struct pt_regs *regs)
 {
+	int err;
 	usb_fifo *fifo = (usb_fifo *)urb->context;
-	hfcusb_data *hfc = fifo->hfc;
-
-	printk(HFC_USB_INFO "RX event on fifo %d\n", fifo->fifonum);
 
 	if (!fifo->active) {
-		printk(HFC_USB_ERR "Event on inactive FIFO %d\n", fifo->fifonum);
+		printk(HFC_USB_ERR "Event on inactive FIFO %d\n", fifo->num);
 		return;
 	}
 	
@@ -451,22 +381,11 @@ hfc_usb_rx_complete(struct urb *urb, struct pt_regs *regs)
 		printk(HFC_USB_ERR "Invalid URB status %d\n", urb->status);
 		return;
 	}
-	
-	printk(HFC_USB_INFO "Got %d URB bytes\n", urb->actual_length);
-	
-	if (urb->actual_length >= 2) {
-		printk(HFC_USB_INFO "State=0x%01X Err=%d EOF=%d Fill0x%01X\n", fifo->buffer[0] >> 4, (fifo->buffer[0] >> 1) & 0x01, fifo->buffer[0] & 0x01, fifo->buffer[1]);
-		hfc_usb_process_state(hfc, fifo->buffer[0] >> 4);
-	}
-}
-#endif
 
-#include "hfc_usb_old.c"
+	hfc_usb_process_data(fifo, fifo->buffer, urb->actual_length);
 
-static void
-hfc_usb_rx_complete(struct urb *urb, struct pt_regs *regs)
-{
-	rx_complete(urb, regs);
+	if ((err = usb_submit_urb(urb, GFP_ATOMIC)))
+		printk(HFC_USB_ERR "Error resubmitting URB at rx_complete (err=%d)...\n", err);
 }
 
 /* stops running iso chain and frees their pending urbs */
@@ -1121,8 +1040,8 @@ hfc_usb_init_hw(hfcusb_data *hfc, u32 packet_size, u32 iso_packet_size)
 
 	fifo = hfc->fifos;
 	for(i = 0; i < HFCUSB_NUM_FIFOS; i++) {
-		fifo[i].skbuff = NULL;	/* init buffer pointer */
 		fifo[i].max_size = (i <= HFCUSB_B2_RX) ? MAX_BCH_SIZE : MAX_DFRAME_LEN;
+		fifo[i].skbuff = dev_alloc_skb(fifo[i].max_size + 3);
 		fifo[i].last_urblen = 0;
 		
 		if ((err = hfc_usb_set_fifo_mode(hfc, i, 1, 0)))
@@ -1307,7 +1226,7 @@ hfc_usb_init_usb(hfcusb_data *hfc, struct usb_interface *intf, int alt_idx, int 
 		
 		}
 
-		fifo->fifonum = ep_cfg_idx & 7;
+		fifo->num = ep_cfg_idx & 7;
 		fifo->hfc = hfc;
 		fifo->usb_packet_maxlen = ep->desc.wMaxPacketSize;
 		fifo->intervall = ep->desc.bInterval;
@@ -1427,8 +1346,6 @@ hfc_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 		return err;
 	}
 	
-//	hfc_usb_set_statemachine(hfc, 1);
-
 //	list_add_tail(&hfc->list, &hfc_usb.ilist);
 //	lock_HW_init(&hfc->lock);
 

@@ -168,8 +168,10 @@ struct hfcusb_data;			/* forward definition */
 typedef struct usb_fifo
 {
 	int transfer_mode;
-	int fifonum;			/* fifo index attached to this structure */
+	int num;			/* fifo index attached to this structure */
 	int active;			/* fifo is currently active */
+	int hdlc_complete;
+	int got_hdr;
 	struct hfcusb_data *hfc;	/* pointer to main structure */
 	int pipe;			/* address of endpoint */
 	__u8 usb_packet_maxlen;		/* maximum length for usb transfer */
@@ -181,7 +183,6 @@ typedef struct usb_fifo
 	int bit_line;			/* how much bits are in the fifo? */
 
 	iso_urb_struct iso[2];		/* need two urbs to have one always for pending */
-//FIXMEFSC	struct hisax_if *hif;		/* hisax interface */
 	int delete_flg;			/* only delete skbuff once */
 	int last_urblen;		/* remember length of last packet */
 
