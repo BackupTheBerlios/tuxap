@@ -649,62 +649,63 @@ const char *getInstrName(const Instruction &aInstruction)
 
 void dumpInstructions(const tInstList &collInstList)
 {
-	unsigned uInstructionCount = collInstList.size();
+	tInstList::const_iterator itCurr = collInstList.begin();
+	tInstList::const_iterator itEnd = collInstList.end();
 
-	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
+	while(itCurr != itEnd)
 	{
 		char pBuf[1000];
 		std::string strArg;
 
-		Instruction aInstruction = collInstList[uInstructionIdx];
+		Instruction aInstruction = *itCurr;
 
-		switch(collInstList[uInstructionIdx].eFormat)
+		switch(itCurr->eFormat)
 		{
 			case IF_NOARG:
 				strArg = "\t<NOARG>";
 				break;
 			case IF_RSRTRD:
-				sprintf(pBuf, "\t%s,%s,%s", getRegName(collInstList[uInstructionIdx].eRS), getRegName(collInstList[uInstructionIdx].eRT), getRegName(collInstList[uInstructionIdx].eRD));
+				sprintf(pBuf, "\t%s,%s,%s", getRegName(itCurr->eRS), getRegName(itCurr->eRT), getRegName(itCurr->eRD));
 				strArg = pBuf;
 				break;
 			case IF_RSRD:
-				sprintf(pBuf, "\t%s,%s", getRegName(collInstList[uInstructionIdx].eRS), getRegName(collInstList[uInstructionIdx].eRD));
+				sprintf(pBuf, "\t%s,%s", getRegName(itCurr->eRS), getRegName(itCurr->eRD));
 				strArg = pBuf;
 				break;
 			case IF_RSRTUI:
-				sprintf(pBuf, "\t%s,%s,0x%X", getRegName(collInstList[uInstructionIdx].eRS), getRegName(collInstList[uInstructionIdx].eRT), collInstList[uInstructionIdx].uUI);
+				sprintf(pBuf, "\t%s,%s,0x%X", getRegName(itCurr->eRS), getRegName(itCurr->eRT), itCurr->uUI);
 				strArg = pBuf;
 				break;
 			case IF_RTUI:
-				sprintf(pBuf, "\t%s,0x%X", getRegName(collInstList[uInstructionIdx].eRT), collInstList[uInstructionIdx].uUI);
+				sprintf(pBuf, "\t%s,0x%X", getRegName(itCurr->eRT), itCurr->uUI);
 				strArg = pBuf;
 				break;
 			case IF_RSSI:
-				sprintf(pBuf, "\t%s,%d", getRegName(collInstList[uInstructionIdx].eRS), collInstList[uInstructionIdx].iSI);
+				sprintf(pBuf, "\t%s,%d", getRegName(itCurr->eRS), itCurr->iSI);
 				strArg = pBuf;
 				break;
 			case IF_RSRT:
-				sprintf(pBuf, "\t%s,%s", getRegName(collInstList[uInstructionIdx].eRS), getRegName(collInstList[uInstructionIdx].eRT));
+				sprintf(pBuf, "\t%s,%s", getRegName(itCurr->eRS), getRegName(itCurr->eRT));
 				strArg = pBuf;
 				break;
 			case IF_RSRTSI:
-				sprintf(pBuf, "\t%s,%s,%d", getRegName(collInstList[uInstructionIdx].eRS), getRegName(collInstList[uInstructionIdx].eRT), collInstList[uInstructionIdx].iSI);
+				sprintf(pBuf, "\t%s,%s,%d", getRegName(itCurr->eRS), getRegName(itCurr->eRT), itCurr->iSI);
 				strArg = pBuf;
 				break;
 			case IF_RD:
-				sprintf(pBuf, "\t%s", getRegName(collInstList[uInstructionIdx].eRD));
+				sprintf(pBuf, "\t%s", getRegName(itCurr->eRD));
 				strArg = pBuf;
 				break;
 			case IF_RS:
-				sprintf(pBuf, "\t%s", getRegName(collInstList[uInstructionIdx].eRS));
+				sprintf(pBuf, "\t%s", getRegName(itCurr->eRS));
 				strArg = pBuf;
 				break;
 			case IF_RTRDSA:
-				sprintf(pBuf, "\t%s,%s,%d", getRegName(collInstList[uInstructionIdx].eRT), getRegName(collInstList[uInstructionIdx].eRD), collInstList[uInstructionIdx].uSA);
+				sprintf(pBuf, "\t%s,%s,%d", getRegName(itCurr->eRT), getRegName(itCurr->eRD), itCurr->uSA);
 				strArg = pBuf;
 			case IF_RTRDSEL:
-				//sprintf(pBuf, "\t%s,%s,%d", getRegName(collInstList[uInstructionIdx].eRT), getRegName(collInstList[uInstructionIdx].eRD), collInstList[uInstructionIdx].uSEL);
-				sprintf(pBuf, "\t%s,%d,%d", getRegName(collInstList[uInstructionIdx].eRT), collInstList[uInstructionIdx].eRD, collInstList[uInstructionIdx].uSEL);
+				//sprintf(pBuf, "\t%s,%s,%d", getRegName(itCurr->eRT), getRegName(itCurr->eRD), itCurr->uSEL);
+				sprintf(pBuf, "\t%s,%d,%d", getRegName(itCurr->eRT), itCurr->eRD, itCurr->uSEL);
 				strArg = pBuf;
 				break;
 			case IF_UNKNOWN:
@@ -715,6 +716,8 @@ void dumpInstructions(const tInstList &collInstList)
 				break;
 		}
 
-		printf("%08x:\t%08x\t%s%s\n", collInstList[uInstructionIdx].uAddress, /*collInstList[uInstructionIdx].uRaw*/0, getInstrName(collInstList[uInstructionIdx]), strArg.c_str());
+		printf("%08x:\t%08x\t%s%s\n", itCurr->uAddress, /*itCurr->uRaw*/0, getInstrName(*itCurr), strArg.c_str());
+
+		itCurr++;
 	}
 }
