@@ -159,6 +159,10 @@ cflags-$(CONFIG_CPU_R4X00)	+= \
 			$(call set_gccflags,r4600,mips3,r4600,mips3,mips2) \
 			-Wa,--trap
 
+cflags-$(CONFIG_CPU_TX49XX)	+= \
+			$(call set_gccflags,r4600,mips3,r4600,mips3,mips2)  \
+			-Wa,--trap
+
 #cflags-$(CONFIG_CPU_MIPS32)	+= \
 #			$(call set_gccflags,mips32,mips32,r4600,mips3,mips2) \
 #			-Wa,--trap
@@ -423,6 +427,13 @@ load-$(CONFIG_MOMENCO_OCELOT_C)	+= 0xffffffff80100000
 core-$(CONFIG_PMC_YOSEMITE)	+= arch/mips/pmc-sierra/yosemite/
 cflags-$(CONFIG_PMC_YOSEMITE)	+= -Iinclude/asm-mips/mach-yosemite
 load-$(CONFIG_PMC_YOSEMITE)	+= 0xffffffff80100000
+
+#
+# Momentum Ocelot-3
+#
+core-$(CONFIG_MOMENCO_OCELOT_3) 	+= arch/mips/momentum/ocelot_3/
+cflags-$(CONFIG_MOMENCO_OCELOT_3)	+= -Iinclude/asm-mips/mach-ocelot3
+load-$(CONFIG_MOMENCO_OCELOT_3) 	+= 0xffffffff80100000
 
 #
 # Momentum Jaguar ATX
