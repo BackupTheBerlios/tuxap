@@ -257,6 +257,17 @@ static bool detectElseBranch(tInstList &collInstList)
 				}
 			}
 		}
+
+		if(detectElseBranch(itCurr->collIfBranch))
+		{
+			return true;
+		}
+
+		if(detectElseBranch(itCurr->collElseBranch))
+		{
+			return true;
+		}
+
 		itCurr++;
 	}
 
