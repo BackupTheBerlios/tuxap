@@ -155,7 +155,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				}
 				else
 				{
-					fprintf(pDestFile, "call UNKNOWN FUNCTION in %s (0x%08X);\n\n", getRegVarName(aInstruction.eRS).c_str(), uValue);
+					fprintf(pDestFile, "/* FIXME: call UNKNOWN FUNCTION in %s (0x%08X); */\n\n", getRegVarName(aInstruction.eRS).c_str(), uValue);
 				}
 				break;
 			}
@@ -168,8 +168,29 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				}
 				else
 				{
-					M_ASSERT(false);
+					fprintf(pDestFile, "/* FIXME: RET-CALL %s; */\n", getRegVarName(aInstruction.eRS).c_str());
 				}
+				break;
+			}
+			case IT_LBU:
+			{
+				doIndent(pDestFile, uDepth);
+				char cSign = aInstruction.iSI < 0 ? '-' : '+';
+				fprintf(pDestFile, "%s = *((unsigned char *)(((unsigned int)(%s)) %c %d));\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI));
+				break;
+			}
+			case IT_LH:
+			{
+				doIndent(pDestFile, uDepth);
+				char cSign = aInstruction.iSI < 0 ? '-' : '+';
+				fprintf(pDestFile, "%s = *((signed short *)(((unsigned int)(%s)) %c %d));\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI));
+				break;
+			}
+			case IT_LHU:
+			{
+				doIndent(pDestFile, uDepth);
+				char cSign = aInstruction.iSI < 0 ? '-' : '+';
+				fprintf(pDestFile, "%s = *((unsigned short *)(((unsigned int)(%s)) %c %d));\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI));
 				break;
 			}
 			case IT_LUI:
@@ -224,6 +245,31 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				else
 				{
 					fprintf(pDestFile, "%s = %s | 0x%X;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.uUI);
+				}
+				break;
+			case IT_SB:
+			{
+				doIndent(pDestFile, uDepth);
+				char cSign = aInstruction.iSI < 0 ? '-' : '+';
+				fprintf(pDestFile, "*((unsigned char *)(((unsigned int)(%s)) %c %d)) = %s & 0xFF;\n", getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI), getRegVarName(aInstruction.eRT).c_str());
+				break;
+			}
+			case IT_SH:
+			{
+				doIndent(pDestFile, uDepth);
+				char cSign = aInstruction.iSI < 0 ? '-' : '+';
+				fprintf(pDestFile, "*((unsigned short *)(((unsigned int)(%s)) %c %d)) = %s & 0xFF;\n", getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI), getRegVarName(aInstruction.eRT).c_str());
+				break;
+			}
+			case IT_SLL:
+				doIndent(pDestFile, uDepth);
+				if(aInstruction.eRD == aInstruction.eRT)
+				{
+					fprintf(pDestFile, "%s <<= %d;\n", getRegVarName(aInstruction.eRD).c_str(), aInstruction.uSA);
+				}
+				else
+				{
+					fprintf(pDestFile, "%s = %s << %d;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRT).c_str(), aInstruction.uSA);
 				}
 				break;
 			case IT_SLTI:
@@ -293,7 +339,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 
 void generateCode(FILE *pDestFile, const std::string &strFunctionName, const tInstList &collInstList)
 {
-	fprintf(pDestFile, "#include \"mipsdec_helper.h\"\n\n");
+	fprintf(pDestFile, "#include \"../mipsdec_helper.h\"\n\n");
 	fprintf(pDestFile, "void %s(void)\n", strFunctionName.c_str());
 	fprintf(pDestFile, "{\n");
 	generateInstructionCode(pDestFile, collInstList, 1);
