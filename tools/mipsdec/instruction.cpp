@@ -556,32 +556,34 @@ void updateJumpTargets(tInstList &collInstList)
 bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tRegister eRegister, unsigned &uRegisterVal)
 {
 	bool bGotAbsoluteVal = false;
-	unsigned uPos = uInstIdx;
+	int iPos = uInstIdx;
 
 	do
 	{
-		switch(collInstList[uPos].eType)
+		Instruction aInstruction = collInstList[iPos];
+
+		switch(collInstList[iPos].eType)
 		{
 			case IT_LUI:
-				if(collInstList[uPos].eRT == eRegister)
+				if(collInstList[iPos].eRT == eRegister)
 				{
-					uRegisterVal = collInstList[uPos].uUI << 16;
+					uRegisterVal = collInstList[iPos].uUI << 16;
 					bGotAbsoluteVal = true;
 				}
 				break;
 			case IT_ADDU:
-				if(collInstList[uPos].eRD == eRegister)
+				if(collInstList[iPos].eRD == eRegister)
 				{
 					unsigned uVal1 = 0;
 
-					if((collInstList[uPos].eRS != R_ZERO) && (!resolveRegisterValue(collInstList, uPos, collInstList[uPos].eRS, uVal1)))
+					if((collInstList[iPos].eRS != R_ZERO) && (!resolveRegisterValue(collInstList, iPos, collInstList[iPos].eRS, uVal1)))
 					{
 						return false;
 					}
 
 					unsigned uVal2 = 0;
 
-					if((collInstList[uPos].eRT != R_ZERO) && (!resolveRegisterValue(collInstList, uPos, collInstList[uPos].eRT, uVal2)))
+					if((collInstList[iPos].eRT != R_ZERO) && (!resolveRegisterValue(collInstList, iPos, collInstList[iPos].eRT, uVal2)))
 					{
 						return false;
 					}
@@ -594,15 +596,15 @@ bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tReg
 
 		if(!bGotAbsoluteVal)
 		{
-			if(collInstList[uPos].bIsJumpTarget)
+			if(collInstList[iPos].bIsJumpTarget)
 			{
 				return false;
 			}
 
-			uPos--;
+			iPos--;
 		}
 	}
-	while((!bGotAbsoluteVal) && (uPos > 0));
+	while((!bGotAbsoluteVal) && (iPos >= 0));
 	
 	if(!bGotAbsoluteVal)
 	{
@@ -610,24 +612,24 @@ bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tReg
 	}
 	
 	/* Skip absolute set instruction */
-	uPos++;
+	iPos++;
 
-	while(uPos < uInstIdx)
+	while(iPos < uInstIdx)
 	{
-		const Instruction *pInstruction = &collInstList[uPos];
+		const Instruction *pInstruction = &collInstList[iPos];
 
-		switch(collInstList[uPos].eType)
+		switch(collInstList[iPos].eType)
 		{
 			case IT_ADDIU:
-				if(collInstList[uPos].eRT == eRegister)
+				if(collInstList[iPos].eRT == eRegister)
 				{
-					M_ASSERT(collInstList[uPos].eRS == eRegister);
-					uRegisterVal += collInstList[uPos].iSI;
+					M_ASSERT(collInstList[iPos].eRS == eRegister);
+					uRegisterVal += collInstList[iPos].iSI;
 				}
 				break;
 			default:
 			{
-				if(collInstList[uPos].modifiesRegister(eRegister))
+				if(collInstList[iPos].modifiesRegister(eRegister))
 				{
 					M_ASSERT(false);
 					return false;
@@ -636,7 +638,7 @@ bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tReg
 			}
 		}
 
-		uPos++;
+		iPos++;
 	}
 	
 	return true;
