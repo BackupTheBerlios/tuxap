@@ -34,11 +34,9 @@ typedef enum {
 	IT_JALR_HB,
 	IT_JR,
 	IT_JR_HB,
-	IT_LI,
 	IT_LUI,
 	IT_LW,
 	IT_MFC0,
-	IT_MOVE,
 	IT_MTC0,
 	IT_NOP,
 	IT_OR,
@@ -51,7 +49,12 @@ typedef enum {
 	IT_XORI,
 } tInstructionType;
 
-typedef struct {
+class tInstruction;
+typedef std::vector<tInstruction> tInstList;
+
+class tInstruction
+{
+public:
 	unsigned uAddress;
 	unsigned uRaw;
 	tInstructionType eType;
@@ -63,11 +66,13 @@ typedef struct {
 	signed short iSI;
 	unsigned int uUA;
 	unsigned char uSEL;
-} tInstruction;
 
-typedef std::vector<tInstruction> tInstList;
+	tInstList collIfBranch;
+	tInstList collElseBranch;
+};
 
 bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, const std::string &strBinFile, tInstList &collInstList);
 void dumpInstructions(const tInstList &collInstList);
+const char *getInstrName(const tInstruction &aInstruction);
 
 #endif

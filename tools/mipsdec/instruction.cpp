@@ -287,11 +287,11 @@ static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInst
 			aInstruction.eType = IT_BNEL;
 			break;
 		case 0x23:
-			decodeRSRTUI(aInstruction);
+			decodeRSRTSI(aInstruction);
 			aInstruction.eType = IT_LW;
 			break;
 		case 0x2B:
-			decodeRSRTUI(aInstruction);
+			decodeRSRTSI(aInstruction);
 			aInstruction.eType = IT_SW;
 			break;
 		default:
@@ -306,34 +306,6 @@ static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInst
 	}
 	
 	return true;
-}
-
-static void optimizeInstruction(tInstruction &aInstruction)
-{
-	switch(aInstruction.eType)
-	{
-		case IT_ADDU:
-			if(aInstruction.eRT == R_ZERO)
-			{
-				aInstruction.eType = IT_MOVE;
-				aInstruction.eFormat = IF_RSRD;
-			}
-			break;
-		case IT_ADDIU:
-			if(aInstruction.eRS == R_ZERO)
-			{
-				aInstruction.eType = IT_LI;
-				aInstruction.eFormat = IF_RTSI;
-			}
-			break;
-		case IT_ORI:
-			if(aInstruction.eRS == R_ZERO)
-			{
-				aInstruction.eType = IT_LI;
-				aInstruction.eFormat = IF_RTUI;
-			}
-			break;
-	}
 }
 
 bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, const std::string &strBinFile, tInstList &collInstList)
@@ -382,11 +354,10 @@ bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, 
 
 		if(!parseInstruction(uData, collSymList[uSymIdx].uAddress + (4 * uInstructionIdx), aInstruction))
 		{
-		//	return false;
+			return false;
 		}
 		else
 		{
-			optimizeInstruction(aInstruction);
 			collInstList.push_back(aInstruction);
 		}
 	}
@@ -396,7 +367,7 @@ bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, 
 	return true;
 }
 
-static const char *getInstrName(const tInstruction &aInstruction)
+const char *getInstrName(const tInstruction &aInstruction)
 {
 	switch(aInstruction.eType)
 	{
@@ -426,16 +397,12 @@ static const char *getInstrName(const tInstruction &aInstruction)
 			return "jr";
 		case IT_JR_HB:
 			return "jr.hb";
-		case IT_LI:
-			return "li";
 		case IT_LUI:
 			return "lui";
 		case IT_LW:
 			return "lw";
 		case IT_MFC0:
 			return "mfc0";
-		case IT_MOVE:
-			return "move";
 		case IT_MTC0:
 			return "mtc0";
 		case IT_NOP:
