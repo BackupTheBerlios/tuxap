@@ -237,6 +237,7 @@ config MIPS_ATLAS
 	select MIPS_BONITO64
 	select MIPS_GT64120
 	select MIPS_MSC
+	select RM7000_CPU_SCACHE
 	select SWAP_IO_SPACE
 	select SYS_SUPPORTS_32BIT_KERNEL
 	select SYS_SUPPORTS_64BIT_KERNEL
@@ -258,6 +259,7 @@ config MIPS_MALTA
 	select MIPS_BONITO64
 	select MIPS_GT64120
 	select MIPS_MSC
+	select RM7000_CPU_SCACHE
 	select SWAP_IO_SPACE
 	select SYS_SUPPORTS_32BIT_KERNEL
 	select SYS_SUPPORTS_64BIT_KERNEL
@@ -639,6 +641,7 @@ source "arch/mips/ite-boards/Kconfig"
 source "arch/mips/lasat/Kconfig"
 source "arch/mips/momentum/Kconfig"
 source "arch/mips/pmc-sierra/Kconfig"
+source "arch/mips/sgi-ip27/Kconfig"
 source "arch/mips/sibyte/Kconfig"
 source "arch/mips/tx4927/Kconfig"
 source "arch/mips/vr41xx/Kconfig"
@@ -1234,6 +1237,17 @@ config PREEMPT
 	  be preempted even if it is in kernel mode executing a system call.
 	  This allows applications to run more reliably even when the system is
 	  under load.
+
+config PREEMPT_BKL
+	bool "Preempt The Big Kernel Lock"
+	depends on PREEMPT
+	default y
+	help
+	  This option reduces the latency of the kernel by making the
+	  big kernel lock preemptible.
+
+	  Say Y here if you are building a kernel for a desktop system.
+	  Say N if you are unsure.
 
 config RTC_DS1742
 	bool "DS1742 BRAM/RTC support"
