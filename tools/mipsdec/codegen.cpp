@@ -33,7 +33,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
 	{
 		bool bBranchAllowed = false;
-		const tInstruction aInstruction = collInstList[uInstructionIdx];
+		const Instruction aInstruction = collInstList[uInstructionIdx];
 
 		switch(aInstruction.eType)
 		{
@@ -77,12 +77,37 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				}
 				break;
 			}
+			case IT_BEQ:
+			{
+				fprintf(pDestFile, "\n");
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "if(%s == %s)\n", getRegVarName(aInstruction.eRS).c_str(), getRegVarName(aInstruction.eRT).c_str());
+				bBranchAllowed = true;
+				break;
+			}
+			case IT_BLTZ:
+			{
+				fprintf(pDestFile, "\n");
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "if(%s < 0)\n", getRegVarName(aInstruction.eRS).c_str());
+				bBranchAllowed = true;
+				break;
+			}
+			case IT_BNE:
 			case IT_BNEL:
 			{
 				fprintf(pDestFile, "\n");
 				doIndent(pDestFile, uDepth);
 				fprintf(pDestFile, "if(%s != %s)\n", getRegVarName(aInstruction.eRS).c_str(), getRegVarName(aInstruction.eRT).c_str());
 				bBranchAllowed = true;
+				break;
+			}
+			case IT_JALR:
+			{
+				fprintf(pDestFile, "\n");
+				doIndent(pDestFile, uDepth);
+				M_ASSERT(aInstruction.eRD == R_RA);
+				fprintf(pDestFile, "call FUNCTION in %s;\n\n", getRegVarName(aInstruction.eRS).c_str());
 				break;
 			}
 			case IT_LUI:

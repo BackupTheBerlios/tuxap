@@ -2,13 +2,6 @@
 #include "instruction.h"
 #include "common.h"
 
-static void swapInstructions(tInstruction &aInstruction1, tInstruction &aInstruction2)
-{
-	tInstruction aInstructionTmp = aInstruction1;
-	aInstruction1 = aInstruction2;
-	aInstruction2 = aInstructionTmp;
-}
-
 bool resolveDelaySlots(tInstList &collInstList)
 {
 	tInstList::iterator itCurr = collInstList.begin();
@@ -20,9 +13,6 @@ bool resolveDelaySlots(tInstList &collInstList)
 		{
 			switch(itCurr->eType)
 			{
-				case IT_BEQ:
-				case IT_BLTZ:
-				case IT_BNE:
 				case IT_J:
 				case IT_JALR:
 				case IT_JALR_HB:
@@ -32,7 +22,28 @@ bool resolveDelaySlots(tInstList &collInstList)
 					itCurr->bDelaySlotReordered = true;
 
 					M_ASSERT((itCurr + 1) < itEnd);
-					swapInstructions(*itCurr, *(itCurr + 1));
+					itCurr->swap(*(itCurr + 1));
+
+					itCurr = collInstList.begin();
+					itEnd = collInstList.end();
+
+					continue;
+				}
+
+				case IT_BEQ:
+				case IT_BLTZ:
+				case IT_BNE:
+				{
+					itCurr->bDelaySlotReordered = true;
+
+					M_ASSERT((itCurr + 1) < itEnd);
+
+					/* Close if branch using the original jump address */
+					Instruction aInstruction;
+					aInstruction.encodeAbsoluteJump();
+					itCurr->collIfBranch.push_back(aInstruction);
+
+					itCurr->swap(*(itCurr + 1));
 
 					itCurr = collInstList.begin();
 					itEnd = collInstList.end();
@@ -50,9 +61,8 @@ bool resolveDelaySlots(tInstList &collInstList)
 					collInstList.erase(itCurr + 1);
 
 					/* Close if branch using the original jump address */
-					tInstruction aInstruction;
-					aInstruction.eType = IT_J;
-					M_ASSERT(false); // FIXME: Complete!
+					Instruction aInstruction;
+					aInstruction.encodeAbsoluteJump();
 					itCurr->collIfBranch.push_back(aInstruction);
 
 					itCurr = collInstList.begin();

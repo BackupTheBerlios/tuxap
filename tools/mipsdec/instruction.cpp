@@ -8,102 +8,25 @@ static unsigned calcSymFileOffset(unsigned uSymAddress)
 	return uSymAddress - 0x80000000;
 }
 
-static void setDefaults(tInstruction &aInstruction)
+void Instruction::encodeAbsoluteJump(void)
 {
-	aInstruction.eFormat = IF_UNKNOWN;
-	aInstruction.eRS = R_UNKNOWN;
-	aInstruction.eRT = R_UNKNOWN;
-	aInstruction.eRD = R_UNKNOWN;
-	aInstruction.uUI = 0;
-	aInstruction.iSI = 0;
-	aInstruction.uUA = 0;
-	aInstruction.uSEL = 0;
+	setDefaults();
+	eType = IT_J;
+	eFormat = IF_UA;
+	bDelaySlotReordered = true;
+	//M_ASSERT(false); // FIXME: Complete!
 }
 
-static void decodeNOARG(tInstruction &aInstruction)
+void Instruction::swap(Instruction &aOtherInstruction)
 {
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_NOARG;
+	Instruction aInstructionTmp = aOtherInstruction;
+	aOtherInstruction = *this;
+	*this = aInstructionTmp;
 }
 
-static void decodeUA(tInstruction &aInstruction)
+bool Instruction::parse(unsigned uInstructionData, unsigned uAddress)
 {
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_UA;
-	aInstruction.uUA = aInstruction.uRaw & 0x3FFFFFF;
-}
-
-static void decodeRTRDSEL(tInstruction &aInstruction)
-{
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_RTRDSEL;
-	aInstruction.eRT = decodeRegister((aInstruction.uRaw >> 16) & 0x1F);
-	aInstruction.eRD = decodeRegister((aInstruction.uRaw >> 11) & 0x1F);
-	aInstruction.uSEL = aInstruction.uRaw & 0x7;
-}
-
-static void decodeRTUI(tInstruction &aInstruction)
-{
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_RTUI;
-	aInstruction.eRT = decodeRegister((aInstruction.uRaw >> 16) & 0x1F);
-	aInstruction.uUI = aInstruction.uRaw & 0xFFFF;
-}
-
-static void decodeRSRTRD(tInstruction &aInstruction)
-{
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_RSRTRD;
-	aInstruction.eRS = decodeRegister((aInstruction.uRaw >> 21) & 0x1F);
-	aInstruction.eRT = decodeRegister((aInstruction.uRaw >> 16) & 0x1F);
-	aInstruction.eRD = decodeRegister((aInstruction.uRaw >> 11) & 0x1F);
-}
-
-static void decodeRSRD(tInstruction &aInstruction)
-{
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_RSRD;
-	aInstruction.eRS = decodeRegister((aInstruction.uRaw >> 21) & 0x1F);
-	aInstruction.eRD = decodeRegister((aInstruction.uRaw >> 11) & 0x1F);
-}
-
-static void decodeRSRTSI(tInstruction &aInstruction)
-{
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_RSRTSI;
-	aInstruction.eRS = decodeRegister((aInstruction.uRaw >> 21) & 0x1F);
-	aInstruction.eRT = decodeRegister((aInstruction.uRaw >> 16) & 0x1F);
-	aInstruction.iSI = aInstruction.uRaw & 0xFFFF;
-}
-
-static void decodeRSSI(tInstruction &aInstruction)
-{
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_RSSI;
-	aInstruction.eRS = decodeRegister((aInstruction.uRaw >> 21) & 0x1F);
-	aInstruction.iSI = aInstruction.uRaw & 0xFFFF;
-}
-
-static void decodeRSRTUI(tInstruction &aInstruction)
-{
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_RSRTUI;
-	aInstruction.eRS = decodeRegister((aInstruction.uRaw >> 21) & 0x1F);
-	aInstruction.eRT = decodeRegister((aInstruction.uRaw >> 16) & 0x1F);
-	aInstruction.uUI = aInstruction.uRaw & 0xFFFF;
-}
-
-static void decodeRS(tInstruction &aInstruction)
-{
-	setDefaults(aInstruction);
-	aInstruction.eFormat = IF_RS;
-	aInstruction.eRS = decodeRegister((aInstruction.uRaw >> 21) & 0x1F);
-}
-
-static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInstruction &aInstruction)
-{
-	aInstruction.uAddress = uAddress;
-	aInstruction.uRaw = uInstructionData;
+	uAddress = uAddress;
 
 	if(uAddress == 0x8016bb64)
 	{
@@ -129,12 +52,12 @@ static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInst
 						switch(uSllOpcode)
 						{
 							case 0x00:
-								decodeNOARG(aInstruction);
-								aInstruction.eType = IT_NOP;
+								decodeNOARG();
+								eType = IT_NOP;
 								break;
 							case 0x01:
-								decodeNOARG(aInstruction);
-								aInstruction.eType = IT_SSNOP;
+								decodeNOARG();
+								eType = IT_SSNOP;
 								break;
 							default:
 								M_ASSERT(false);
@@ -144,43 +67,43 @@ static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInst
 					}
 					else
 					{
-						aInstruction.eType = IT_SLL;
+						eType = IT_SLL;
 					}
 					break;
 				}
 				case 0x08:
-					decodeRS(aInstruction);
+					decodeRS(uInstructionData);
 					if(uInstructionData & (1 << 10))
 					{
-						aInstruction.eType = IT_JR_HB;
+						eType = IT_JR_HB;
 					}
 					else
 					{
-						aInstruction.eType = IT_JR;
+						eType = IT_JR;
 					}
 					break;
 				case 0x09:
-					decodeRSRD(aInstruction);
+					decodeRSRD(uInstructionData);
 					if(uInstructionData & (1 << 10))
 					{
-						aInstruction.eType = IT_JALR_HB;
+						eType = IT_JALR_HB;
 					}
 					else
 					{
-						aInstruction.eType = IT_JALR;
+						eType = IT_JALR;
 					}
 					break;
 				case 0x21:
-					decodeRSRTRD(aInstruction);
-					aInstruction.eType = IT_ADDU;
+					decodeRSRTRD(uInstructionData);
+					eType = IT_ADDU;
 					break;
 				case 0x24:
-					decodeRSRTRD(aInstruction);
-					aInstruction.eType = IT_AND;
+					decodeRSRTRD(uInstructionData);
+					eType = IT_AND;
 					break;
 				case 0x25:
-					decodeRSRTRD(aInstruction);
-					aInstruction.eType = IT_OR;
+					decodeRSRTRD(uInstructionData);
+					eType = IT_OR;
 					break;
 				default:
 				{
@@ -202,8 +125,8 @@ static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInst
 			switch(uRegimmOpcode)
 			{
 				case 0x00:
-					decodeRSSI(aInstruction);
-					aInstruction.eType = IT_BLTZ;
+					decodeRSSI(uInstructionData);
+					eType = IT_BLTZ;
 					break;
 				default:
 				{
@@ -218,45 +141,45 @@ static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInst
 			break;
 		}
 		case 0x02:
-			decodeUA(aInstruction);
-			aInstruction.eType = IT_J;
+			decodeUA(uInstructionData);
+			eType = IT_J;
 			break;
 		case 0x04:
-			decodeRSRTSI(aInstruction);
-			aInstruction.eType = IT_BEQ;
+			decodeRSRTSI(uInstructionData);
+			eType = IT_BEQ;
 			break;
 		case 0x05:
-			decodeRSRTSI(aInstruction);
-			aInstruction.eType = IT_BNE;
+			decodeRSRTSI(uInstructionData);
+			eType = IT_BNE;
 			break;
 		case 0x09:
-			decodeRSRTSI(aInstruction);
-			aInstruction.eType = IT_ADDIU;
+			decodeRSRTSI(uInstructionData);
+			eType = IT_ADDIU;
 			break;
 		case 0x0A:
-			decodeRSRTSI(aInstruction);
-			aInstruction.eType = IT_SLTI;
+			decodeRSRTSI(uInstructionData);
+			eType = IT_SLTI;
 			break;
 		case 0x0B:
-			decodeRSRTSI(aInstruction);
-			aInstruction.eType = IT_SLTIU;
+			decodeRSRTSI(uInstructionData);
+			eType = IT_SLTIU;
 			break;
 		case 0x0C:
-			decodeRSRTUI(aInstruction);
-			aInstruction.eType = IT_ANDI;
+			decodeRSRTUI(uInstructionData);
+			eType = IT_ANDI;
 			break;
 		case 0x0D:
 			// CHECKME: signed or not?
-			decodeRSRTUI(aInstruction);
-			aInstruction.eType = IT_ORI;
+			decodeRSRTUI(uInstructionData);
+			eType = IT_ORI;
 			break;
 		case 0x0E:
-			decodeRSRTUI(aInstruction);
-			aInstruction.eType = IT_XORI;
+			decodeRSRTUI(uInstructionData);
+			eType = IT_XORI;
 			break;
 		case 0x0F:
-			decodeRTUI(aInstruction);
-			aInstruction.eType = IT_LUI;
+			decodeRTUI(uInstructionData);
+			eType = IT_LUI;
 			break;
 		case 0x10: /* COP0 instructions */
 		{
@@ -265,10 +188,10 @@ static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInst
 			switch(uCop0Opcode)
 			{
 				case 0x00:
-					aInstruction.eType = IT_MFC0;
+					eType = IT_MFC0;
 					break;
 				case 0x04:
-					aInstruction.eType = IT_MTC0;
+					eType = IT_MTC0;
 					break;
 				default:
 				{
@@ -283,16 +206,16 @@ static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInst
 			break;
 		}
 		case 0x15:
-			decodeRSRTSI(aInstruction);
-			aInstruction.eType = IT_BNEL;
+			decodeRSRTSI(uInstructionData);
+			eType = IT_BNEL;
 			break;
 		case 0x23:
-			decodeRSRTSI(aInstruction);
-			aInstruction.eType = IT_LW;
+			decodeRSRTSI(uInstructionData);
+			eType = IT_LW;
 			break;
 		case 0x2B:
-			decodeRSRTSI(aInstruction);
-			aInstruction.eType = IT_SW;
+			decodeRSRTSI(uInstructionData);
+			eType = IT_SW;
 			break;
 		default:
 		{
@@ -306,6 +229,101 @@ static bool parseInstruction(unsigned uInstructionData, unsigned uAddress, tInst
 	}
 	
 	return true;
+}
+
+void Instruction::setDefaults(void)
+{
+	eFormat = IF_UNKNOWN;
+	eRS = R_UNKNOWN;
+	eRT = R_UNKNOWN;
+	eRD = R_UNKNOWN;
+	uUI = 0;
+	iSI = 0;
+	uUA = 0;
+	uSEL = 0;
+	bDelaySlotReordered = false;
+	collIfBranch.clear();
+	collElseBranch.clear();
+}
+
+void Instruction::decodeNOARG(void)
+{
+	setDefaults();
+	eFormat = IF_NOARG;
+}
+
+void Instruction::decodeUA(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_UA;
+	uUA = uInstructionData & 0x3FFFFFF;
+}
+
+void Instruction::decodeRTRDSEL(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RTRDSEL;
+	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
+	eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
+	uSEL = uInstructionData & 0x7;
+}
+
+void Instruction::decodeRTUI(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RTUI;
+	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
+	uUI = uInstructionData & 0xFFFF;
+}
+
+void Instruction::decodeRSRTRD(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RSRTRD;
+	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
+	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
+	eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
+}
+
+void Instruction::decodeRSRD(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RSRD;
+	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
+	eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
+}
+
+void Instruction::decodeRSRTSI(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RSRTSI;
+	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
+	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
+	iSI = uInstructionData & 0xFFFF;
+}
+
+void Instruction::decodeRSSI(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RSSI;
+	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
+	iSI = uInstructionData & 0xFFFF;
+}
+
+void Instruction::decodeRSRTUI(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RSRTUI;
+	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
+	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
+	uUI = uInstructionData & 0xFFFF;
+}
+
+void Instruction::decodeRS(unsigned uInstructionData)
+{
+	setDefaults();
+	eFormat = IF_RS;
+	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
 }
 
 bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, const std::string &strBinFile, tInstList &collInstList)
@@ -348,11 +366,11 @@ bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, 
 			return false;
 		}
 		
-		tInstruction aInstruction;
+		Instruction aInstruction;
 
 		aInstruction.eFormat = IF_UNKNOWN;
 
-		if(!parseInstruction(uData, collSymList[uSymIdx].uAddress + (4 * uInstructionIdx), aInstruction))
+		if(!aInstruction.parse(uData, collSymList[uSymIdx].uAddress + (4 * uInstructionIdx)))
 		{
 			return false;
 		}
@@ -367,7 +385,7 @@ bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, 
 	return true;
 }
 
-const char *getInstrName(const tInstruction &aInstruction)
+const char *getInstrName(const Instruction &aInstruction)
 {
 	switch(aInstruction.eType)
 	{
@@ -438,7 +456,7 @@ void dumpInstructions(const tInstList &collInstList)
 		char pBuf[1000];
 		std::string strArg;
 
-		tInstruction aInstruction = collInstList[uInstructionIdx];
+		Instruction aInstruction = collInstList[uInstructionIdx];
 
 		switch(collInstList[uInstructionIdx].eFormat)
 		{
@@ -489,6 +507,6 @@ void dumpInstructions(const tInstList &collInstList)
 				break;
 		}
 
-		printf("%08x:\t%08x\t%s%s\n", collInstList[uInstructionIdx].uAddress, collInstList[uInstructionIdx].uRaw, getInstrName(collInstList[uInstructionIdx]), strArg.c_str());
+		printf("%08x:\t%08x\t%s%s\n", collInstList[uInstructionIdx].uAddress, /*collInstList[uInstructionIdx].uRaw*/0, getInstrName(collInstList[uInstructionIdx]), strArg.c_str());
 	}
 }

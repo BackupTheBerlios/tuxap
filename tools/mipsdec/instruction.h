@@ -49,19 +49,22 @@ typedef enum {
 	IT_XORI,		// No delay slot
 } tInstructionType;
 
-class tInstruction;
-typedef std::vector<tInstruction> tInstList;
+class Instruction;
+typedef std::vector<Instruction> tInstList;
 
-class tInstruction
+class Instruction
 {
 public:
-	tInstruction(void) :
+	Instruction(void) :
 			bDelaySlotReordered(false)
 	{
 	}
 
+	void encodeAbsoluteJump(void);
+	void swap(Instruction &aOtherInstruction);
+	bool parse(unsigned uInstructionData, unsigned uAddress);
+
 	unsigned uAddress;
-	unsigned uRaw;
 	tInstructionType eType;
 	tInstructionFormat eFormat;
 	tRegister eRS;
@@ -76,10 +79,23 @@ public:
 	tInstList collElseBranch;
 
 	bool bDelaySlotReordered;
+	
+private:
+	void setDefaults(void);
+	void decodeNOARG(void);
+	void decodeUA(unsigned uInstructionData);
+	void decodeRTRDSEL(unsigned uInstructionData);
+	void decodeRTUI(unsigned uInstructionData);
+	void decodeRSRTRD(unsigned uInstructionData);
+	void decodeRSRD(unsigned uInstructionData);
+	void decodeRSRTSI(unsigned uInstructionData);
+	void decodeRSSI(unsigned uInstructionData);
+	void decodeRSRTUI(unsigned uInstructionData);
+	void decodeRS(unsigned uInstructionData);
 };
 
 bool parseFunction(const std::string &strFuncName, const tSymList &collSymList, const std::string &strBinFile, tInstList &collInstList);
 void dumpInstructions(const tInstList &collInstList);
-const char *getInstrName(const tInstruction &aInstruction);
+const char *getInstrName(const Instruction &aInstruction);
 
 #endif
