@@ -68,22 +68,6 @@ static mISDNobject_t hfc_usb;
 static int debug;
 static int HFC_cnt;
 
-
-/* begin old stuff */
-struct hfcusb_data;
-struct usb_fifo;
-struct led_info;
-
-static void hfc_usb_handle_led(struct hfcusb_data *hfc, int event);
-static void hfc_usb_stop_isoc_chain(struct usb_fifo *fifo);
-static int hfc_usb_lock_dev(void *data, int nowait);
-static void hfc_usb_unlock_dev(void *data);
-static int hfc_usb_init_dchannel(struct hfcusb_data *ta);
-static int hfc_usb_init_bchannels(struct hfcusb_data *ta);
-static int hfc_usb_register_channels(struct hfcusb_data *ta);
-#include "hfc_usb_old.c"
-/* end old stuff */
-
 /******************************************************************************/
 /* Hardware related functions                                                 */
 /******************************************************************************/
@@ -183,30 +167,6 @@ hfc_usb_set_statemachine(hfcusb_data *hfc, u8 activate)
 	hfc_usb_queue_reg_xs(hfc, HFCUSB_STATES, val);
 	
 	return 0;
-}
-
-static void 
-hfc_usb_process_state(hfcusb_data *hfc, u8 new_state)
-{
-	if (hfc->l1_state == new_state)
-		return;
-
-	printk(HFC_USB_INFO "State transition from %d to %d\n", hfc->l1_state, new_state);
-
-	switch(new_state) {
-		case 3:
-			break;
-		case 7:
-			hfc_usb_set_statemachine(hfc, 1);
-			hfc->l1_activated = 1;
-			hfc_usb_handle_led(hfc, LED_S0_ON);
-			break;
-		default:
-			printk(HFC_USB_ERR "Unhandled state %d\n", new_state);
-	
-	}
-	
-	hfc->l1_state = new_state;
 }
 
 static int
@@ -330,6 +290,31 @@ hfc_usb_handle_led(hfcusb_data *hfc, int event)
 	hfc_usb_write_led(hfc, led_state);
 }
 
+static void 
+hfc_usb_process_state(hfcusb_data *hfc, u8 new_state)
+{
+	if (hfc->l1_state == new_state)
+		return;
+
+	printk(HFC_USB_INFO "State transition from %d to %d\n", hfc->l1_state, new_state);
+
+	switch(new_state) {
+		case 3:
+			break;
+		case 7:
+			hfc_usb_set_statemachine(hfc, 1);
+			hfc->l1_activated = 1;
+			hfc_usb_handle_led(hfc, LED_S0_ON);
+			break;
+		default:
+			printk(HFC_USB_ERR "Unhandled state %d\n", new_state);
+	
+	}
+	
+	hfc->l1_state = new_state;
+}
+
+#if 0
 static void
 collect_rx_frame(usb_fifo *fifo, u8 *data, int len, int finish)
 {
@@ -473,6 +458,15 @@ hfc_usb_rx_complete(struct urb *urb, struct pt_regs *regs)
 		printk(HFC_USB_INFO "State=0x%01X Err=%d EOF=%d Fill0x%01X\n", fifo->buffer[0] >> 4, (fifo->buffer[0] >> 1) & 0x01, fifo->buffer[0] & 0x01, fifo->buffer[1]);
 		hfc_usb_process_state(hfc, fifo->buffer[0] >> 4);
 	}
+}
+#endif
+
+#include "hfc_usb_old.c"
+
+static void
+hfc_usb_rx_complete(struct urb *urb, struct pt_regs *regs)
+{
+	rx_complete(urb, regs);
 }
 
 /* stops running iso chain and frees their pending urbs */
