@@ -9,7 +9,7 @@
  * SPECIFICALLY DISCLAIMS ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS
  * FOR A SPECIFIC PURPOSE OR NONINFRINGEMENT CONCERNING THIS SOFTWARE.
  *
- * $Id: linux_osl.c,v 1.1 2005/02/28 13:33:32 jolt Exp $
+ * $Id: linux_osl.c,v 1.2 2005/02/28 13:34:25 jolt Exp $
  */
 
 #define LINUX_OSL
@@ -77,7 +77,7 @@ osl_pci_read_config(void *loc, uint offset, uint size)
 
 	pdev = (struct pci_dev*)loc;
 	do {
-		pcibios_read_config_dword(pdev->bus->number, pdev->devfn, offset, &val);
+		pci_read_config_dword(pdev, offset, &val);
 		if (val != 0xffffffff)
 			break;
 	} while (retry--);
@@ -98,7 +98,7 @@ osl_pci_write_config(void *loc, uint offset, uint size, uint val)
 	pdev = (struct pci_dev*)loc;
 
 	do {
-		pcibios_write_config_dword(pdev->bus->number, pdev->devfn, offset, val);
+		pci_write_config_dword(pdev, offset, val);
 		if (offset!=PCI_BAR0_WIN)
 			break;
 		if (osl_pci_read_config(loc,offset,size) == val) 

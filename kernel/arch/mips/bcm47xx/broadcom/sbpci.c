@@ -9,7 +9,7 @@
  * SPECIFICALLY DISCLAIMS ANY IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS
  * FOR A SPECIFIC PURPOSE OR NONINFRINGEMENT CONCERNING THIS SOFTWARE.
  *
- * $Id: sbpci.c,v 1.1 2005/02/28 13:33:32 jolt Exp $
+ * $Id: sbpci.c,v 1.2 2005/02/28 13:34:25 jolt Exp $
  */
 
 #include <typedefs.h>
@@ -193,12 +193,12 @@ sb_write_config(void *sbh, uint bus, uint dev, uint func, uint off, void *buf, i
 			n = (R_REG(&sb->sbidlow) & SBIDL_AR_MASK) >> SBIDL_AR_SHIFT;
 			if (off == OFFSETOF(pci_config_regs, base[0]))
 				cfg->base[0] = ~(sb_size(R_REG(&sb->sbadmatch0)) - 1);
-			else if (off == OFFSETOF(pci_config_regs, base[1]) && n >= 1)
+			/*else if (off == OFFSETOF(pci_config_regs, base[1]) && n >= 1)
 				cfg->base[1] = ~(sb_size(R_REG(&sb->sbadmatch1)) - 1);
 			else if (off == OFFSETOF(pci_config_regs, base[2]) && n >= 2)
 				cfg->base[2] = ~(sb_size(R_REG(&sb->sbadmatch2)) - 1);
 			else if (off == OFFSETOF(pci_config_regs, base[3]) && n >= 3)
-				cfg->base[3] = ~(sb_size(R_REG(&sb->sbadmatch3)) - 1);
+				cfg->base[3] = ~(sb_size(R_REG(&sb->sbadmatch3)) - 1);*/
 		}
 		sb_setcoreidx(sbh, coreidx);
 		return 0;
@@ -367,7 +367,7 @@ sbpci_init(void *sbh)
 		case SB_PCI:
 			class = PCI_CLASS_BRIDGE;
 			subclass = PCI_BRIDGE_PCI;
-			break;
+			//break;
 		case SB_MIPS:
 		case SB_MIPS33:
 			class = PCI_CLASS_CPU;
@@ -437,9 +437,9 @@ sbpci_init(void *sbh)
 		cfg->sub_class = subclass;
 		cfg->base_class = class;
 		cfg->base[0] = htol32(sb_base(R_REG(&sb->sbadmatch0)));
-		cfg->base[1] = htol32(sb_base(R_REG(&sb->sbadmatch1)));
-		cfg->base[2] = htol32(sb_base(R_REG(&sb->sbadmatch2)));
-		cfg->base[3] = htol32(sb_base(R_REG(&sb->sbadmatch3)));
+		cfg->base[1] = 0/*htol32(sb_base(R_REG(&sb->sbadmatch1)))*/;
+		cfg->base[2] = 0/*htol32(sb_base(R_REG(&sb->sbadmatch2)))*/;
+		cfg->base[3] = 0/*htol32(sb_base(R_REG(&sb->sbadmatch3)))*/;
 		cfg->base[4] = 0;
 		cfg->base[5] = 0;
 		if (class == PCI_CLASS_BRIDGE && subclass == PCI_BRIDGE_PCI)
