@@ -283,6 +283,9 @@ static void invertCondition(Instruction &aInstruction)
 		case IT_BEQ:
 			aInstruction.eType = IT_BNE;
 			break;
+		case IT_BNE:
+			aInstruction.eType = IT_BEQ;
+			break;
 		case IT_BLTZ:
 			aInstruction.eType = IT_BGEZ;
 			break;
@@ -389,24 +392,102 @@ static bool detectEndOfBranchJumps(tInstList &collInstList)
 	return false;
 }
 
-bool optimizeInstructions(tInstList &collInstList, unsigned uCompletePassesDone)
+static bool stripEpilogProlog(tInstList &collInstList, unsigned uStackOffset)
 {
-	if(reassembleSingleJumpBlocks(collInstList))
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		if(itCurr->modifiesRegister(R_SP))
+		{
+			M_ASSERT(itCurr->eType == IT_ADDIU);
+			M_ASSERT(abs(itCurr->iSI) == uStackOffset);
+
+			if(itCurr->bIsJumpTarget)
+			{
+				itCurr->makeNOP();
+			}
+			else
+			{
+				collInstList.erase(itCurr);
+			}
+			return true;
+		}
+
+		if(((itCurr->eType == IT_LW) || (itCurr->eType == IT_SW)) && (itCurr->eRS == R_SP))
+		{
+			int iDelta = uStackOffset - abs(itCurr->iSI);
+			switch(iDelta)
+			{
+				case 4:
+				case 8:
+				case 12:
+				case 16:
+					if(itCurr->bIsJumpTarget)
+					{
+						itCurr->makeNOP();
+					}
+					else
+					{
+						collInstList.erase(itCurr);
+					}
+					return true;
+					break;
+				//default:
+					//M_ASSERT(false);
+			}
+		}
+
+		if(stripEpilogProlog(itCurr->collIfBranch, uStackOffset))
+		{
+			return true;
+		}
+
+		if(stripEpilogProlog(itCurr->collElseBranch, uStackOffset))
+		{
+			return true;
+		}
+
+		itCurr++;
+	}
+
+	return false;
+}
+
+static bool detectEpilogProlog(Function &aFunction)
+{
+	if(!aFunction.bHasStackOffset)
+	{
+		return false;
+	}
+
+	return stripEpilogProlog(aFunction.collInstList, aFunction.uStackOffset);
+}
+
+bool optimizeInstructions(Function &aFunction, unsigned uCompletePassesDone)
+{
+	if(reassembleSingleJumpBlocks(aFunction.collInstList))
 	{
 		return true;
 	}
 	
-	if(detectElseBranch(collInstList))
+	if(detectElseBranch(aFunction.collInstList))
 	{
 		return true;
 	}
 	
-	if(detectOnlyElseBranch(collInstList))
+	if(detectOnlyElseBranch(aFunction.collInstList))
 	{
 		return true;
 	}
 	
-	if(detectEndOfBranchJumps(collInstList))
+	if(detectEndOfBranchJumps(aFunction.collInstList))
+	{
+		return true;
+	}
+
+	if(detectEpilogProlog(aFunction))
 	{
 		return true;
 	}

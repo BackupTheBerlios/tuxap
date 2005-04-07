@@ -2,8 +2,9 @@
 #define OPTIMIZE_H
 
 #include "instruction.h"
+#include "function.h"
 
 bool resolveDelaySlots(tInstList &collInstList);
-bool optimizeInstructions(tInstList &collInstList, unsigned uCompletePassesDone);
+bool optimizeInstructions(Function &aFunction, unsigned uCompletePassesDone);
 
 #endif
