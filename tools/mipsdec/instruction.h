@@ -50,6 +50,7 @@ typedef enum {
 	IT_JALR_HB,	// Delay slot
 	IT_JR,			// Delay slot
 	IT_JR_HB,		// Delay slot
+	IT_LB,			// No delay slot
 	IT_LBU,			// No delay slot
 	IT_LH,			// No delay slot
 	IT_LHU,			// No delay slot
@@ -70,6 +71,7 @@ typedef enum {
 	IT_SLTIU,		// No delay slot
 	IT_SLTU,		// No delay slot
 	IT_SRA,			// No delay slot
+	IT_SRL,			// No delay slot
 	IT_SSNOP,		// No delay slot
 	IT_SUBU,		// No delay slot
 	IT_SW,			// No delay slot
@@ -95,6 +97,7 @@ public:
 	bool parse(unsigned uInstructionData, unsigned uInstructionAddress);
 	bool modifiesRegister(tRegister eRegister) const;
 	void encodeRegisterMove(tRegister eSrcRegister, tRegister eDstRegister);
+	void makeNOP(void);
 	tInstructionDelaySlot getDelaySlotType(void);
 	tInstructionClass getClassType(void);
 
@@ -133,7 +136,6 @@ private:
 	void decodeRS(unsigned uInstructionData);
 };
 
-bool parseFunction(const std::string &strFuncName, const std::string &strBinFile, tInstList &collInstList);
 void updateJumpTargets(tInstList &collInstList);
 bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tRegister eRegister, unsigned &uRegisterVal);
 void dumpInstructions(const tInstList &collInstList);

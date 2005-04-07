@@ -45,6 +45,7 @@ static tInstructionInfo s_InstructionInfo[] =
 	DECLARE_REGULAR_OPCODE(0x02, J,		IF_NOARG,	RF_NONE,	IDS_UNCONDITIONAL),
 	DECLARE_SPECIAL_OPCODE(0x09, JALR,	IF_RSRD,	RF_NONE,	IDS_UNCONDITIONAL),
 	DECLARE_SPECIAL_OPCODE(0x08, JR,		IF_RS,		RF_NONE,	IDS_UNCONDITIONAL),
+	DECLARE_REGULAR_OPCODE(0x20, LB,		IF_RSRTSI,	RF_RT,		IDS_NONE),
 	DECLARE_REGULAR_OPCODE(0x24, LBU,		IF_RSRTSI,	RF_RT,		IDS_NONE),
 	DECLARE_REGULAR_OPCODE(0x21, LH,		IF_RSRTSI,	RF_RT,		IDS_NONE),
 	DECLARE_REGULAR_OPCODE(0x25, LHU,		IF_RSRTSI,	RF_RT,		IDS_NONE),
@@ -66,6 +67,7 @@ static tInstructionInfo s_InstructionInfo[] =
 	DECLARE_REGULAR_OPCODE(0x0B, SLTIU,	IF_RSRTSI,	RF_RT,		IDS_NONE),
 	DECLARE_SPECIAL_OPCODE(0x2B, SLTU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
 	DECLARE_SPECIAL_OPCODE(0x03, SRA,		IF_RTRDSA,	RF_RD,		IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x02, SRL,		IF_RTRDSA,	RF_RD,		IDS_NONE),
 	DECLARE_VIRTUAL_OPCODE(      SSNOP,	IF_NOARG,	RF_NONE,	IDS_NONE),
 	DECLARE_SPECIAL_OPCODE(0x23, SUBU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
 	DECLARE_REGULAR_OPCODE(0x2B, SW,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
@@ -91,11 +93,6 @@ static unsigned getInstructionInfoIdx(tInstructionType eType)
 	M_ASSERT(false);
 
 	return 0;
-}
-
-static unsigned calcSymFileOffset(unsigned uSymAddress)
-{
-	return uSymAddress - 0x80000000;
 }
 
 void Instruction::encodeAbsoluteJump(unsigned uJAddress)
@@ -169,6 +166,10 @@ bool decodeData(unsigned uInstructionData, unsigned &uInfoIdx)
 			}
 		}
 	}
+
+	unsigned uOp1 = uOpcode >> 3;
+	unsigned uOp2 = uOpcode & 7;
+	unsigned uSpecialOpcode = uInstructionData & 0x3F;
 
 	M_ASSERT(false);
 	return false;
@@ -314,6 +315,21 @@ void Instruction::encodeRegisterMove(tRegister eSrcRegister, tRegister eDstRegis
 	eRD = eDstRegister;
 }
 
+void Instruction::makeNOP(void)
+{
+	M_ASSERT(collIfBranch.size() == 0);
+	M_ASSERT(collElseBranch.size() == 0);
+	M_ASSERT(uJumpAddress == 0);
+
+	bool bWasJumpTarget = bIsJumpTarget;
+	unsigned uOldAddress = uAddress;
+
+	decodeNOARG();
+	eType = IT_NOP;
+	uAddress = uOldAddress;
+	bIsJumpTarget = bWasJumpTarget;
+}
+
 tInstructionDelaySlot Instruction::getDelaySlotType(void)
 {
 	return s_InstructionInfo[getInstructionInfoIdx(eType)].eDelaySlot;
@@ -447,73 +463,6 @@ void Instruction::decodeRS(unsigned uInstructionData)
 	setDefaults();
 	eFormat = IF_RS;
 	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
-}
-
-bool parseFunction(const std::string &strFuncName, const std::string &strBinFile, tInstList &collInstList)
-{
-	unsigned uSymIdx;
-
-	if(!Symbols::lookup(strFuncName, uSymIdx))
-	{
-		printf("Unable to locate function %s\n", strFuncName.c_str());
-		return false;
-	}
-
-	unsigned uInstructionCount;
-
-	if((uSymIdx + 1) == Symbols::getCount())
-	{
-		M_ASSERT(false); // FIXME: TODO
-	}
-	else
-	{
-		uInstructionCount = (Symbols::get(uSymIdx + 1)->uAddress - Symbols::get(uSymIdx)->uAddress) / 4;
-	}
-	
-	FILE *pBinFile = fopen(strBinFile.c_str(), "rb");
-	
-	if(!pBinFile)
-	{
-		printf("Can't open binary file: %s\n", strBinFile.c_str());
-		return false;
-	}
-	
-	fseek(pBinFile, calcSymFileOffset(Symbols::get(uSymIdx)->uAddress), SEEK_SET);
-	
-	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
-	{
-		unsigned uData = 0;
-
-		for(unsigned uByteIdx = 0; uByteIdx < sizeof(uData); uByteIdx++)
-		{
-			unsigned char uByte;
-
-			if(fread(&uByte, 1, sizeof(uByte), pBinFile) != sizeof(uByte))
-			{
-				printf("Short binary file read!\n");
-				return false;
-			}
-			
-			uData = (uData >> 8) | (uByte << 24);
-		}
-		
-		Instruction aInstruction;
-
-		aInstruction.eFormat = IF_UNKNOWN;
-
-		if(!aInstruction.parse(uData, Symbols::get(uSymIdx)->uAddress + (4 * uInstructionIdx)))
-		{
-			return false;
-		}
-		else
-		{
-			collInstList.push_back(aInstruction);
-		}
-	}
-	
-	fclose(pBinFile);
-
-	return true;
 }
 
 static bool isJumpTarget(const tInstList &collInstList, unsigned uAddress)

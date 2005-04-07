@@ -2,6 +2,7 @@
 #include "instruction.h"
 #include "codegen.h"
 #include "optimize.h"
+#include "function.h"
 #include "common.h"
 
 #ifndef _WIN32
@@ -28,31 +29,33 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	tInstList collInstList;
+	Function aFunction;
 	
-	parseFunction(strFunction, strBinaryFile, collInstList);
+	aFunction.parseFromFile(strFunction, strBinaryFile);
 	//dumpInstructions(collInstList);
-	resolveDelaySlots(collInstList);
+	resolveDelaySlots(aFunction.collInstList);
 	//dumpInstructions(collInstList);
+
+	aFunction.detectStackOffset();
 
 	unsigned uCompletePassesDone = 0;
 
 	while(uCompletePassesDone < 2)
 	{
 		do {
-			updateJumpTargets(collInstList);
+			updateJumpTargets(aFunction.collInstList);
 			//dumpInstructions(collInstList);
 		} 
-		while(optimizeInstructions(collInstList, uCompletePassesDone));
+		while(optimizeInstructions(aFunction, uCompletePassesDone));
 
 		uCompletePassesDone++;
 	}
 
-	updateJumpTargets(collInstList);
+	updateJumpTargets(aFunction.collInstList);
 	//dumpInstructions(collInstList);
 
 	FILE *pCodeFile = fopen("code.c", "w");
-	generateCode(pCodeFile, strFunction, collInstList);
+	generateCode(pCodeFile, aFunction);
 	fclose(pCodeFile);
 
 	return 0;

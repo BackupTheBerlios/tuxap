@@ -1,4 +1,5 @@
 #include "instruction.h"
+#include "function.h"
 #include "common.h"
 
 std::string getIndentStr(unsigned uDepth)
@@ -345,11 +346,11 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 	}
 }
 
-void generateCode(FILE *pDestFile, const std::string &strFunctionName, const tInstList &collInstList)
+void generateCode(FILE *pDestFile, const Function &aFunction)
 {
 	fprintf(pDestFile, "#include \"../mipsdec_helper.h\"\n\n");
-	fprintf(pDestFile, "void %s(void)\n", strFunctionName.c_str());
+	fprintf(pDestFile, "void %s(void)\n", aFunction.strName.c_str());
 	fprintf(pDestFile, "{\n");
-	generateInstructionCode(pDestFile, collInstList, 1);
+	generateInstructionCode(pDestFile, aFunction.collInstList, 1);
 	fprintf(pDestFile, "}\n");
 }

@@ -89,6 +89,10 @@ SOURCE=..\codegen.cpp
 # End Source File
 # Begin Source File
 
+SOURCE=..\function.cpp
+# End Source File
+# Begin Source File
+
 SOURCE=..\instruction.cpp
 # End Source File
 # Begin Source File
@@ -121,7 +125,15 @@ SOURCE=..\common.h
 # End Source File
 # Begin Source File
 
+SOURCE=..\function.h
+# End Source File
+# Begin Source File
+
 SOURCE=..\instruction.h
+# End Source File
+# Begin Source File
+
+SOURCE=..\mipsdec_helper.h
 # End Source File
 # Begin Source File
 

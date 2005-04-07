@@ -1,6 +1,8 @@
 #ifndef CODEGEN_H
 #define CODEGEN_H
 
-void generateCode(FILE *pDestFile, const std::string &strFunctionName, const tInstList &collInstList);
+#include "function.h"
+
+void generateCode(FILE *pDestFile, const Function &aFunction);
 
 #endif
