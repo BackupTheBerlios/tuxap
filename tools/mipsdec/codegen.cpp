@@ -181,6 +181,13 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				}
 				break;
 			}
+			case IT_LB:
+			{
+				doIndent(pDestFile, uDepth);
+				char cSign = aInstruction.iSI < 0 ? '-' : '+';
+				fprintf(pDestFile, "%s = *((signed char *)(((unsigned int)(%s)) %c %d));\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), cSign, abs(aInstruction.iSI));
+				break;
+			}
 			case IT_LBU:
 			{
 				doIndent(pDestFile, uDepth);
@@ -282,12 +289,31 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				}
 				break;
 			case IT_SLTI:
+			{
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "%s = (((signed int)%s) < %d) ? 1 : 0;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.iSI);
+				break;
+			}
 			case IT_SLTIU:
 			{
 				doIndent(pDestFile, uDepth);
-				fprintf(pDestFile, "%s = (%s < %d) ? 1 : 0;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.iSI);
+				fprintf(pDestFile, "%s = (((unsigned int)%s) < %d) ? 1 : 0;\n", getRegVarName(aInstruction.eRT).c_str(), getRegVarName(aInstruction.eRS).c_str(), aInstruction.iSI);
 				break;
 			}
+			case IT_SLTU:
+			{
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "%s = (((unsigned int)%s) < %s) ? 1 : 0;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRS).c_str(), getRegVarName(aInstruction.eRT).c_str());
+				break;
+			}
+			case IT_SRA:
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "%s = ((signed int)%s) >> %d;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRT).c_str(), aInstruction.uSA);
+				break;
+			case IT_SRL:
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "%s = ((unsigned int)%s) >> %d;\n", getRegVarName(aInstruction.eRD).c_str(), getRegVarName(aInstruction.eRT).c_str(), aInstruction.uSA);
+				break;
 			case IT_SSNOP:
 				/* Ignore */
 				break;
