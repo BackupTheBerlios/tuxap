@@ -29,7 +29,4 @@ static unsigned REG_t3;
 static unsigned REG_v0;
 static unsigned REG_v1;
 
-static unsigned read_c0_status(void) { return 0; }
-static void write_c0_status(unsigned uVal) {}
-
 #endif
