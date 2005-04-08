@@ -465,6 +465,77 @@ static bool detectEpilogProlog(Function &aFunction)
 	return stripEpilogProlog(aFunction.collInstList, aFunction.uStackOffset);
 }
 
+static unsigned getInstructionCount(const tInstList::iterator &itBlockBegin, const tInstList::iterator &itBlockEnd)
+{
+	unsigned uInstructionCount = 0;
+	tInstList::iterator itCurr = itBlockBegin;
+
+	while(itCurr != itBlockEnd)
+	{
+		switch(itCurr->eType)
+		{
+			case IT_NOP:
+			case IT_SSNOP:
+				break;
+			default:
+				uInstructionCount++;
+				uInstructionCount += getInstructionCount(itCurr->collIfBranch.begin(), itCurr->collIfBranch.end());
+				uInstructionCount += getInstructionCount(itCurr->collElseBranch.begin(), itCurr->collElseBranch.end());
+		}
+
+		itCurr++;
+	}
+
+	return uInstructionCount;
+}
+
+#define MAX_CLONE_INSTRUCTIONS 10
+
+static bool detectAndCloneSmallBlocks(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		if(itCurr->bIsJumpTarget)
+		{
+			tInstList::iterator itBlockBegin = itCurr;
+			tInstList::iterator itBlockEnd = itCurr + 1;
+
+			while(itBlockEnd != itEnd)
+			{
+				if((itBlockEnd->eType == IT_J) || (itBlockEnd->eType == IT_JR))
+				{
+					unsigned uInstructionCount = getInstructionCount(itBlockBegin, itBlockEnd + 1);
+
+					if(uInstructionCount <= MAX_CLONE_INSTRUCTIONS)
+					{
+						tInstList *pInstList;
+						tInstList::iterator itPosition;
+
+						unsigned uNumJumpSources = getCalcNumJumpSources(collInstList, itBlockBegin->uAddress, &pInstList, &itPosition);
+						//M_ASSERT(uNumJumpSources > 1);
+
+						itPosition = pInstList->erase(itPosition);
+						pInstList->insert(itPosition, itBlockBegin, itBlockEnd + 1);
+
+						return true;
+					}
+
+					break;
+				}
+
+				itBlockEnd++;
+			}
+		}
+
+		itCurr++;
+	}
+
+	return false;
+}
+
 bool optimizeInstructions(Function &aFunction, unsigned uCompletePassesDone)
 {
 	if(reassembleSingleJumpBlocks(aFunction.collInstList))
@@ -492,5 +563,10 @@ bool optimizeInstructions(Function &aFunction, unsigned uCompletePassesDone)
 		return true;
 	}
 	
+	if(detectAndCloneSmallBlocks(aFunction.collInstList))
+	{
+		return true;
+	}
+
 	return false;
 }
