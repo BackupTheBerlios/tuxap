@@ -286,6 +286,9 @@ static void invertCondition(Instruction &aInstruction)
 		case IT_BNE:
 			aInstruction.eType = IT_BEQ;
 			break;
+		case IT_BGTZ:
+			aInstruction.eType = IT_BLEZ;
+			break;
 		case IT_BLTZ:
 			aInstruction.eType = IT_BGEZ;
 			break;
@@ -424,6 +427,8 @@ static bool stripEpilogProlog(tInstList &collInstList, unsigned uStackOffset)
 				case 8:
 				case 12:
 				case 16:
+				case 20:
+				case 24:
 					if(itCurr->bIsJumpTarget)
 					{
 						itCurr->makeNOP();

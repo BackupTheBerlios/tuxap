@@ -127,6 +127,14 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				bBranchAllowed = true;
 				break;
 			}
+			case IT_BLEZ:
+			{
+				fprintf(pDestFile, "\n");
+				doIndent(pDestFile, uDepth);
+				fprintf(pDestFile, "if(((signed int)%s) <= 0)\n", getRegVarName(aInstruction.eRS).c_str());
+				bBranchAllowed = true;
+				break;
+			}
 			case IT_BLTZ:
 			{
 				fprintf(pDestFile, "\n");
@@ -160,7 +168,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				unsigned uSymIdx;
 				if((resolveRegisterValue(collInstList, uInstructionIdx, aInstruction.eRS, uValue)) && (Symbols::lookup(uValue, uSymIdx)))
 				{
-					fprintf(pDestFile, "%s();\n\n", Symbols::get(uSymIdx)->strName.c_str());									
+					fprintf(pDestFile, "%s = %s();\n\n", getRegVarName(R_V0).c_str(), Symbols::get(uSymIdx)->strName.c_str());									
 				}
 				else
 				{
@@ -375,6 +383,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 void generateCode(FILE *pDestFile, const Function &aFunction)
 {
 	fprintf(pDestFile, "#include \"../mipsdec_helper.h\"\n\n");
+	fprintf(pDestFile, "/* Stack offset: %d */\n", aFunction.uStackOffset);
 	fprintf(pDestFile, "void %s(void)\n", aFunction.strName.c_str());
 	fprintf(pDestFile, "{\n");
 	generateInstructionCode(pDestFile, aFunction.collInstList, 1);

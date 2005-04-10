@@ -41,6 +41,8 @@ typedef enum {
 	IT_BEQ,			// Delay slot
 	IT_BEQL,		// Conditional delay slot
 	IT_BGEZ,		// Delay slot
+	IT_BGTZ,		// Delay slot
+	IT_BLEZ,		// Delay slot
 	IT_BLTZ,		// Delay slot
 	IT_BNE,			// Delay slot
 	IT_BNEL,		// Conditional delay slot
