@@ -218,6 +218,10 @@
 				</FileConfiguration>
 			</File>
 			<File
+				RelativePath="..\function.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\instruction.cpp"
 				>
 				<FileConfiguration
@@ -338,6 +342,10 @@
 			</File>
 			<File
 				RelativePath="..\common.h"
+				>
+			</File>
+			<File
+				RelativePath="..\function.h"
 				>
 			</File>
 			<File
