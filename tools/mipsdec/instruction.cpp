@@ -357,6 +357,18 @@ tInstructionClass Instruction::getClassType(void)
 	}
 }
 
+bool Instruction::isNOP(void)
+{
+	switch(eType)
+	{
+		case IT_NOP:
+		case IT_SSNOP:
+			return true;
+		default:
+			return false;
+	}
+}
+
 void Instruction::setDefaults(void)
 {
 	eFormat = IF_UNKNOWN;

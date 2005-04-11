@@ -497,6 +497,35 @@ static bool detectEpilogProlog(Function &aFunction)
 	return stripEpilogProlog(aFunction.collInstList, aFunction.uStackOffset);
 }
 
+static bool stripNops(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		if((itCurr->isNOP()) && (!itCurr->bIsJumpTarget))
+		{
+			collInstList.erase(itCurr);
+			return true;
+		}
+
+		if(stripNops(itCurr->collIfBranch))
+		{
+			return true;
+		}
+
+		if(stripNops(itCurr->collElseBranch))
+		{
+			return true;
+		}
+
+		itCurr++;
+	}
+
+	return false;
+}
+
 static unsigned getInstructionCount(const tInstList::iterator &itBlockBegin, const tInstList::iterator &itBlockEnd)
 {
 	unsigned uInstructionCount = 0;
@@ -504,15 +533,11 @@ static unsigned getInstructionCount(const tInstList::iterator &itBlockBegin, con
 
 	while(itCurr != itBlockEnd)
 	{
-		switch(itCurr->eType)
+		if(!itCurr->isNOP())
 		{
-			case IT_NOP:
-			case IT_SSNOP:
-				break;
-			default:
-				uInstructionCount++;
-				uInstructionCount += getInstructionCount(itCurr->collIfBranch.begin(), itCurr->collIfBranch.end());
-				uInstructionCount += getInstructionCount(itCurr->collElseBranch.begin(), itCurr->collElseBranch.end());
+			uInstructionCount++;
+			uInstructionCount += getInstructionCount(itCurr->collIfBranch.begin(), itCurr->collIfBranch.end());
+			uInstructionCount += getInstructionCount(itCurr->collElseBranch.begin(), itCurr->collElseBranch.end());
 		}
 
 		itCurr++;
@@ -598,6 +623,11 @@ bool optimizeInstructions(Function &aFunction)
 		return true;
 	}
 	
+	if(stripNops(aFunction.collInstList))
+	{
+		return true;
+	}
+
 	if(detectAndCloneSmallBlocks(aFunction, aFunction.collInstList))
 	{
 		return true;

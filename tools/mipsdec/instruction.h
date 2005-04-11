@@ -102,6 +102,7 @@ public:
 	void makeNOP(void);
 	tInstructionDelaySlot getDelaySlotType(void);
 	tInstructionClass getClassType(void);
+	bool isNOP(void);
 
 	unsigned uAddress;
 	tInstructionType eType;
