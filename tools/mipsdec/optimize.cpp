@@ -137,11 +137,6 @@ static unsigned getCalcNumJumpSources(tInstList &collInstList, unsigned uAddress
 		itCurr++;
 	}
 
-	if(uDepth == 0)
-	{
-		int i = 1;
-	}
-
 	return uNumJumpSources;
 }
 
@@ -437,7 +432,7 @@ static bool stripEpilogProlog(tInstList &collInstList, unsigned uStackOffset)
 		if(itCurr->modifiesRegister(R_SP))
 		{
 			M_ASSERT(itCurr->eType == IT_ADDIU);
-			M_ASSERT(abs(itCurr->iSI) == uStackOffset);
+			M_ASSERT((unsigned)abs(itCurr->iSI) == uStackOffset);
 
 			if(itCurr->bIsJumpTarget)
 			{
@@ -576,7 +571,7 @@ static bool detectAndCloneSmallBlocks(Function &aFunction, tInstList &aCurrBranc
 	return false;
 }
 
-bool optimizeInstructions(Function &aFunction, unsigned uCompletePassesDone)
+bool optimizeInstructions(Function &aFunction)
 {
 	if(reassembleSingleJumpBlocks(aFunction, aFunction.collInstList))
 	{

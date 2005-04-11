@@ -38,18 +38,11 @@ int main(int argc, char **argv)
 
 	aFunction.detectStackOffset();
 
-	unsigned uCompletePassesDone = 0;
-
-	while(uCompletePassesDone < 2)
-	{
-		do {
-			updateJumpTargets(aFunction.collInstList);
-			//dumpInstructions(collInstList);
-		} 
-		while(optimizeInstructions(aFunction, uCompletePassesDone));
-
-		uCompletePassesDone++;
-	}
+	do {
+		updateJumpTargets(aFunction.collInstList);
+		//dumpInstructions(collInstList);
+	} 
+	while(optimizeInstructions(aFunction));
 
 	updateJumpTargets(aFunction.collInstList);
 	//dumpInstructions(collInstList);

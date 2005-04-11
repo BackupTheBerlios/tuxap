@@ -24,11 +24,11 @@ typedef struct
 	tInstructionDelaySlot eDelaySlot;
 } tInstructionInfo;
 
-#define DECLARE_REGULAR_OPCODE(opcode, type, format, result_field, delayslot) {opcode, ~0, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
-#define DECLARE_SPECIAL_OPCODE(specialopcode, type, format, result_field, delayslot) {0x00, specialopcode, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
-#define DECLARE_REGIMM_OPCODE(regdimmopcode, type, format, result_field, delayslot) {0x01, ~0, regdimmopcode, ~0, #type, IT_##type, format, result_field, delayslot}
-#define DECLARE_COP0_OPCODE(cop0opcode, type, format, result_field, delayslot) {0x10, ~0, ~0, cop0opcode, #type, IT_##type, format, result_field, delayslot}
-#define DECLARE_VIRTUAL_OPCODE(type, format, result_field, delayslot) {~0, ~0, ~0, ~0, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_REGULAR_OPCODE(opcode, type, format, result_field, delayslot) {opcode, ~0UL, ~0UL, ~0UL, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_SPECIAL_OPCODE(specialopcode, type, format, result_field, delayslot) {0x00, specialopcode, ~0UL, ~0UL, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_REGIMM_OPCODE(regdimmopcode, type, format, result_field, delayslot) {0x01, ~0UL, regdimmopcode, ~0UL, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_COP0_OPCODE(cop0opcode, type, format, result_field, delayslot) {0x10, ~0UL, ~0UL, cop0opcode, #type, IT_##type, format, result_field, delayslot}
+#define DECLARE_VIRTUAL_OPCODE(type, format, result_field, delayslot) {~0UL, ~0UL, ~0UL, ~0UL, #type, IT_##type, format, result_field, delayslot}
 
 static tInstructionInfo s_InstructionInfo[] = 
 {
@@ -169,9 +169,11 @@ bool decodeData(unsigned uInstructionData, unsigned &uInfoIdx)
 		}
 	}
 
+#if 0
 	unsigned uOp1 = uOpcode >> 3;
 	unsigned uOp2 = uOpcode & 7;
 	unsigned uSpecialOpcode = uInstructionData & 0x3F;
+#endif
 
 	M_ASSERT(false);
 	return false;
@@ -383,7 +385,7 @@ void Instruction::decodeRTRDSA(unsigned uInstructionData)
 	eFormat = IF_RTRDSA;
 	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
 	eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
-	uSA = (uInstructionData >> 6) & 0x1F;
+	uSA = (unsigned char)((uInstructionData >> 6) & 0x1F);
 }
 
 void Instruction::decodeRTRDSEL(unsigned uInstructionData)
@@ -392,7 +394,7 @@ void Instruction::decodeRTRDSEL(unsigned uInstructionData)
 	eFormat = IF_RTRDSEL;
 	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
 	//eRD = decodeRegister((uInstructionData >> 11) & 0x1F);
-	uSEL = uInstructionData & 0x7;
+	uSEL = (unsigned char)(uInstructionData & 0x7);
 }
 
 void Instruction::decodeRTUI(unsigned uInstructionData)
@@ -400,7 +402,7 @@ void Instruction::decodeRTUI(unsigned uInstructionData)
 	setDefaults();
 	eFormat = IF_RTUI;
 	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
-	uUI = uInstructionData & 0xFFFF;
+	uUI = (unsigned short)(uInstructionData & 0xFFFF);
 }
 
 void Instruction::decodeRSRTRD(unsigned uInstructionData)
@@ -434,7 +436,7 @@ void Instruction::decodeRSRTSI(unsigned uInstructionData)
 	eFormat = IF_RSRTSI;
 	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
 	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
-	iSI = uInstructionData & 0xFFFF;
+	iSI = (signed short)(uInstructionData & 0xFFFF);
 }
 
 void Instruction::decodeRSSI(unsigned uInstructionData)
@@ -442,7 +444,7 @@ void Instruction::decodeRSSI(unsigned uInstructionData)
 	setDefaults();
 	eFormat = IF_RSSI;
 	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
-	iSI = uInstructionData & 0xFFFF;
+	iSI = (signed short)(uInstructionData & 0xFFFF);
 }
 
 void Instruction::decodeRSRTUI(unsigned uInstructionData)
@@ -451,7 +453,7 @@ void Instruction::decodeRSRTUI(unsigned uInstructionData)
 	eFormat = IF_RSRTUI;
 	eRS = decodeRegister((uInstructionData >> 21) & 0x1F);
 	eRT = decodeRegister((uInstructionData >> 16) & 0x1F);
-	uUI = uInstructionData & 0xFFFF;
+	uUI = (unsigned short)(uInstructionData & 0xFFFF);
 }
 
 void Instruction::decodeRD(unsigned uInstructionData)

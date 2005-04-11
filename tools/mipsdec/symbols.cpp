@@ -54,7 +54,7 @@ bool Symbols::parseSymFile(const std::string &strSymFile)
 
 bool Symbols::lookup(const std::string &strSymName, unsigned &uSymIdx)
 {
-	unsigned uNumSymbols = m_collSymbolList.size();
+	size_t uNumSymbols = m_collSymbolList.size();
 
 	for(unsigned uIdx = 0; uIdx < uNumSymbols; uIdx++)
 	{
@@ -70,7 +70,7 @@ bool Symbols::lookup(const std::string &strSymName, unsigned &uSymIdx)
 
 bool Symbols::lookup(unsigned uAddress, unsigned &uSymIdx)
 {
-	unsigned uNumSymbols = m_collSymbolList.size();
+	size_t uNumSymbols = m_collSymbolList.size();
 
 	for(unsigned uIdx = 0; uIdx < uNumSymbols; uIdx++)
 	{
@@ -84,7 +84,7 @@ bool Symbols::lookup(unsigned uAddress, unsigned &uSymIdx)
 	return false;
 }
 
-unsigned Symbols::getCount(void)
+size_t Symbols::getCount(void)
 {
 	return m_collSymbolList.size();
 }
