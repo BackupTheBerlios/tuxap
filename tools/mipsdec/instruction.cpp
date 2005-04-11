@@ -470,24 +470,27 @@ void Instruction::decodeRS(unsigned uInstructionData)
 
 static bool isJumpTarget(const tInstList &collInstList, unsigned uAddress)
 {
-	unsigned uInstructionCount = collInstList.size();
+	tInstList::const_iterator itCurr = collInstList.begin();
+	tInstList::const_iterator itEnd = collInstList.end();
 
-	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
+	while(itCurr != itEnd)
 	{
-		if((collInstList[uInstructionIdx].uJumpAddress == uAddress) && (!collInstList[uInstructionIdx].bIgnoreJump))
+		if((itCurr->uJumpAddress == uAddress) && (!itCurr->bIgnoreJump))
 		{
 			return true;
 		}
 
-		if(isJumpTarget(collInstList[uInstructionIdx].collIfBranch, uAddress))
+		if(isJumpTarget(itCurr->collIfBranch, uAddress))
 		{
 			return true;
 		}
 
-		if(isJumpTarget(collInstList[uInstructionIdx].collElseBranch, uAddress))
+		if(isJumpTarget(itCurr->collElseBranch, uAddress))
 		{
 			return true;
 		}
+
+		itCurr++;
 	}
 	
 	return false;
@@ -495,48 +498,53 @@ static bool isJumpTarget(const tInstList &collInstList, unsigned uAddress)
 
 void updateJumpTargets(tInstList &collInstList)
 {
-	unsigned uInstructionCount = collInstList.size();
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
 
-	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
+	while(itCurr != itEnd)
 	{
-		collInstList[uInstructionIdx].bIsJumpTarget = isJumpTarget(collInstList, collInstList[uInstructionIdx].uAddress);
+		itCurr->bIsJumpTarget = isJumpTarget(collInstList, itCurr->uAddress);
 
-		updateJumpTargets(collInstList[uInstructionIdx].collIfBranch);
-		updateJumpTargets(collInstList[uInstructionIdx].collElseBranch);
+		updateJumpTargets(itCurr->collIfBranch);
+		updateJumpTargets(itCurr->collElseBranch);
+
+		itCurr++;
 	}
 }
 
-bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tRegister eRegister, unsigned &uRegisterVal)
+bool resolveRegisterValue(const tInstList &collInstList, const tInstList::const_iterator &itCurrInstruction, tRegister eRegister, unsigned &uRegisterVal)
 {
+	tInstList::const_iterator itBegin = collInstList.begin();
+	tInstList::const_iterator itCurr = itCurrInstruction;
+	tInstList::const_iterator itEnd = itCurrInstruction;
 	bool bGotAbsoluteVal = false;
-	int iPos = uInstIdx;
 
 	do
 	{
-		Instruction aInstruction = collInstList[iPos];
+		Instruction aInstruction = *itCurr;
 
-		switch(collInstList[iPos].eType)
+		switch(itCurr->eType)
 		{
 			case IT_LUI:
-				if(collInstList[iPos].eRT == eRegister)
+				if(itCurr->eRT == eRegister)
 				{
-					uRegisterVal = collInstList[iPos].uUI << 16;
+					uRegisterVal = itCurr->uUI << 16;
 					bGotAbsoluteVal = true;
 				}
 				break;
 			case IT_ADDU:
-				if(collInstList[iPos].eRD == eRegister)
+				if(itCurr->eRD == eRegister)
 				{
 					unsigned uVal1 = 0;
 
-					if((collInstList[iPos].eRS != R_ZERO) && (!resolveRegisterValue(collInstList, iPos, collInstList[iPos].eRS, uVal1)))
+					if((itCurr->eRS != R_ZERO) && (!resolveRegisterValue(collInstList, itCurr, itCurr->eRS, uVal1)))
 					{
 						return false;
 					}
 
 					unsigned uVal2 = 0;
 
-					if((collInstList[iPos].eRT != R_ZERO) && (!resolveRegisterValue(collInstList, iPos, collInstList[iPos].eRT, uVal2)))
+					if((itCurr->eRT != R_ZERO) && (!resolveRegisterValue(collInstList, itCurr, itCurr->eRT, uVal2)))
 					{
 						return false;
 					}
@@ -549,40 +557,40 @@ bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tReg
 
 		if(!bGotAbsoluteVal)
 		{
-			if(collInstList[iPos].bIsJumpTarget)
+			if(itCurr->bIsJumpTarget)
 			{
 				return false;
 			}
 
-			iPos--;
+			if(itCurr == itBegin)
+			{
+				return false;
+			}
+
+			itCurr--;
 		}
 	}
-	while((!bGotAbsoluteVal) && (iPos >= 0));
-	
-	if(!bGotAbsoluteVal)
-	{
-		return false;
-	}
+	while(!bGotAbsoluteVal);
 	
 	/* Skip absolute set instruction */
-	iPos++;
+	itCurr++;
 
-	while(iPos < uInstIdx)
+	while(itCurr != itEnd)
 	{
-		const Instruction *pInstruction = &collInstList[iPos];
+		const Instruction aInstruction = *itCurr;
 
-		switch(collInstList[iPos].eType)
+		switch(itCurr->eType)
 		{
 			case IT_ADDIU:
-				if(collInstList[iPos].eRT == eRegister)
+				if(itCurr->eRT == eRegister)
 				{
-					M_ASSERT(collInstList[iPos].eRS == eRegister);
-					uRegisterVal += collInstList[iPos].iSI;
+					M_ASSERT(itCurr->eRS == eRegister);
+					uRegisterVal += itCurr->iSI;
 				}
 				break;
 			default:
 			{
-				if(collInstList[iPos].modifiesRegister(eRegister))
+				if(itCurr->modifiesRegister(eRegister))
 				{
 					M_ASSERT(false);
 					return false;
@@ -591,7 +599,7 @@ bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tReg
 			}
 		}
 
-		iPos++;
+		itCurr++;
 	}
 	
 	return true;

@@ -29,12 +29,13 @@ void doIndent(FILE *pDestFile, unsigned uDepth)
 
 void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, unsigned uDepth)
 {
-	unsigned uInstructionCount = collInstList.size();
+	tInstList::const_iterator itCurr = collInstList.begin();
+	tInstList::const_iterator itEnd = collInstList.end();
 
-	for(unsigned uInstructionIdx = 0; uInstructionIdx < uInstructionCount; uInstructionIdx++)
+	while(itCurr != itEnd)
 	{
 		bool bBranchAllowed = false;
-		const Instruction aInstruction = collInstList[uInstructionIdx];
+		const Instruction aInstruction = *itCurr;
 
 		//fprintf(pDestFile, "%08X:\n", aInstruction.uAddress);
 
@@ -166,7 +167,7 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 
 				unsigned uValue = 0;
 				unsigned uSymIdx;
-				if((resolveRegisterValue(collInstList, uInstructionIdx, aInstruction.eRS, uValue)) && (Symbols::lookup(uValue, uSymIdx)))
+				if((resolveRegisterValue(collInstList, itCurr, aInstruction.eRS, uValue)) && (Symbols::lookup(uValue, uSymIdx)))
 				{
 					fprintf(pDestFile, "%s = %s();\n\n", getRegVarName(R_V0).c_str(), Symbols::get(uSymIdx)->strName.c_str());									
 				}
@@ -377,6 +378,8 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 				M_ASSERT(false);
 			}
 		}
+
+		itCurr++;
 	}
 }
 

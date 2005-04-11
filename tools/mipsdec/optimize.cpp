@@ -46,9 +46,12 @@ bool resolveDelaySlots(tInstList &collInstList)
 
 	while(itCurr != itEnd)
 	{
+		tInstList::iterator itNext = itCurr;
+		itNext++;
+
 		if((!itCurr->bDelaySlotReordered) && (itCurr->getDelaySlotType() != IDS_NONE))
 		{
-			M_ASSERT((itCurr + 1) < itEnd);
+			M_ASSERT(itNext != itEnd);
 			itCurr->bDelaySlotReordered = true;
 
 			switch(itCurr->getDelaySlotType())
@@ -58,22 +61,22 @@ bool resolveDelaySlots(tInstList &collInstList)
 					M_ASSERT(itCurr->getClassType() == IC_BRANCH);
 
 					/* Move delay slot instruction into if branch */
-					itCurr->collIfBranch.push_back(*(itCurr + 1));
-					collInstList.erase(itCurr + 1);
+					itCurr->collIfBranch.push_back(*itNext);
+					collInstList.erase(itNext);
 					break;
 				}
 				case IDS_UNCONDITIONAL:
-					if((itCurr->getClassType() == IC_BRANCH) && (delaySlotClash(*itCurr, *(itCurr + 1))))
+					if((itCurr->getClassType() == IC_BRANCH) && (delaySlotClash(*itCurr, *itNext)))
 					{
 						/* Move delay slot instruction into if and else branch */
-						itCurr->collIfBranch.push_back(*(itCurr + 1));
-						itCurr->collElseBranch.push_back(*(itCurr + 1));
-						collInstList.erase(itCurr + 1);
+						itCurr->collIfBranch.push_back(*itNext);
+						itCurr->collElseBranch.push_back(*itNext);
+						collInstList.erase(itNext);
 					}
 					else
 					{
 						/* Swap master and delay slot instruction */
-						itCurr->swap(*(itCurr + 1), false);
+						itCurr->swap(*itNext, false);
 						itCurr++;
 					}
 					break;
@@ -102,7 +105,7 @@ bool resolveDelaySlots(tInstList &collInstList)
 	return true;
 }
 
-static unsigned getCalcNumJumpSources(tInstList &collInstList, unsigned uAddress, tInstList **pInstList = NULL, tInstList::iterator *pPosition = NULL)
+static unsigned getCalcNumJumpSources(tInstList &collInstList, unsigned uAddress, tInstList **pInstList = NULL, tInstList::iterator *pPosition = NULL, unsigned uDepth = 0)
 {
 	M_ASSERT(uAddress != 0);
 	M_ASSERT(uAddress != 0xFFFFFFFF);
@@ -128,10 +131,15 @@ static unsigned getCalcNumJumpSources(tInstList &collInstList, unsigned uAddress
 			}
 		}
 
-		uNumJumpSources += getCalcNumJumpSources(itCurr->collIfBranch, uAddress, pInstList, pPosition);
-		uNumJumpSources += getCalcNumJumpSources(itCurr->collElseBranch, uAddress, pInstList, pPosition);
+		uNumJumpSources += getCalcNumJumpSources(itCurr->collIfBranch, uAddress, pInstList, pPosition, uDepth + 1);
+		uNumJumpSources += getCalcNumJumpSources(itCurr->collElseBranch, uAddress, pInstList, pPosition, uDepth + 1);
 
 		itCurr++;
+	}
+
+	if(uDepth == 0)
+	{
+		int i = 1;
 	}
 
 	return uNumJumpSources;
@@ -145,21 +153,23 @@ static unsigned getCalcNumJumpSources(tInstList &collInstList, unsigned uAddress
 /* - First instruction in the block has only one jump source         */
 /* - Last instruction in the block is an absolute jump instruction   */
 /* - No instruction in the block (except the first) is a jump target */
-static bool reassembleSingleJumpBlocks(tInstList &collInstList)
+static bool reassembleSingleJumpBlocks(Function &aFunction, tInstList &aCurrBranch)
 {
-	tInstList::iterator itCurr = collInstList.begin();
-	tInstList::iterator itEnd = collInstList.end();
+	tInstList::iterator itCurr = aCurrBranch.begin();
+	tInstList::iterator itEnd = aCurrBranch.end();
 
 	while(itCurr != itEnd)
 	{
 		if(itCurr->eType == IT_J)
 		{
-			tInstList::iterator itBlockBegin = itCurr + 1;
+			tInstList::iterator itBlockBegin = itCurr;
+			itBlockBegin++;
 
 			/* Found jump instruction next has to be a jump target */
 			if((itBlockBegin != itEnd) && (itBlockBegin->bIsJumpTarget))
 			{
-				tInstList::iterator itBlockEnd = itBlockBegin + 1;
+				tInstList::iterator itBlockEnd = itBlockBegin;
+				itBlockEnd++;
 
 				/* Now search for a closing jump instruction */
 				while(itBlockEnd != itEnd)
@@ -176,13 +186,16 @@ static bool reassembleSingleJumpBlocks(tInstList &collInstList)
 						tInstList *pInstList;
 						tInstList::iterator itSourcePosition;
 
-						unsigned uNumJumpSources = getCalcNumJumpSources(collInstList, itBlockBegin->uAddress, &pInstList, &itSourcePosition);
+						unsigned uNumJumpSources = getCalcNumJumpSources(aFunction.collInstList, itBlockBegin->uAddress, &pInstList, &itSourcePosition);
 						if(uNumJumpSources == 1)
 						{
+							tInstList::iterator itBlockEndNext = itBlockEnd;
+							itBlockEndNext++;
+
 							/* Yeah! Found one... move block into if branch*/
 							itSourcePosition = pInstList->erase(itSourcePosition);
-							pInstList->insert(itSourcePosition, itBlockBegin, itBlockEnd + 1);
-							collInstList.erase(itBlockBegin, itBlockEnd + 1);
+							pInstList->insert(itSourcePosition, itBlockBegin, itBlockEndNext);
+							aCurrBranch.erase(itBlockBegin, itBlockEndNext);
 
 							return true;
 						}
@@ -193,12 +206,12 @@ static bool reassembleSingleJumpBlocks(tInstList &collInstList)
 			}
 		}
 
-		if(reassembleSingleJumpBlocks(itCurr->collIfBranch))
+		if(reassembleSingleJumpBlocks(aFunction, itCurr->collIfBranch))
 		{
 			return true;
 		}
 
-		if(reassembleSingleJumpBlocks(itCurr->collElseBranch))
+		if(reassembleSingleJumpBlocks(aFunction, itCurr->collElseBranch))
 		{
 			return true;
 		}
@@ -231,11 +244,17 @@ static bool detectElseBranch(tInstList &collInstList)
 			/* Last if branch instruction a jump instruction? */
 			if(itJumpInstruction->eType == IT_J)
 			{
-				tInstList::iterator itBlockBegin = itCurr + 1;
-				tInstList::iterator itBlockEnd = itCurr + 1;
+				tInstList::iterator itBlockBegin = itCurr;
+				itBlockBegin++;
+
+				tInstList::iterator itBlockEnd = itCurr;
+				itBlockEnd++;
 
 				while(itBlockEnd != itEnd)
 				{
+					tInstList::iterator itBlockNext = itBlockEnd;
+					itBlockNext++;
+
 					if(itBlockEnd->uAddress == itJumpInstruction->uJumpAddress)
 					{
 						/* Remove jump from if branch */
@@ -252,6 +271,16 @@ static bool detectElseBranch(tInstList &collInstList)
 					{
 						break;
 					}
+
+#if 0
+					if(itBlockNext == itEnd)
+					{
+						/* Move block into else branch */
+						itCurr->collElseBranch.insert(itCurr->collElseBranch.begin(), itBlockBegin, itBlockNext);
+						collInstList.erase(itBlockBegin, itBlockNext);
+						return false;
+					}
+#endif
 
 					itBlockEnd++;
 				}
@@ -373,23 +402,26 @@ static bool detectEndOfBranchJumps(tInstList &collInstList)
 {
 	tInstList::iterator itCurr = collInstList.begin();
 	tInstList::iterator itEnd = collInstList.end();
+	tInstList::iterator itNext = collInstList.begin();
+	itNext++;
 
-	while((itCurr != itEnd) && ((itCurr + 1) != itEnd))
+	while((itCurr != itEnd) && (itNext != itEnd))
 	{
-		if(((itCurr->collIfBranch.size() > 0) || (itCurr->collElseBranch.size() > 0)) && ((itCurr + 1)->bIsJumpTarget))
+		if(((itCurr->collIfBranch.size() > 0) || (itCurr->collElseBranch.size() > 0)) && (itNext->bIsJumpTarget))
 		{
-			if(removeClosingJump(itCurr->collIfBranch, (itCurr + 1)->uAddress))
+			if(removeClosingJump(itCurr->collIfBranch, itNext->uAddress))
 			{
 				return true;
 			}
 
-			if(removeClosingJump(itCurr->collElseBranch, (itCurr + 1)->uAddress))
+			if(removeClosingJump(itCurr->collElseBranch, itNext->uAddress))
 			{
 				return true;
 			}
 		}
 
 		itCurr++;
+		itNext++;
 	}
 
 	return false;
@@ -496,34 +528,37 @@ static unsigned getInstructionCount(const tInstList::iterator &itBlockBegin, con
 
 #define MAX_CLONE_INSTRUCTIONS 10
 
-static bool detectAndCloneSmallBlocks(tInstList &collInstList)
+static bool detectAndCloneSmallBlocks(Function &aFunction, tInstList &aCurrBranch)
 {
-	tInstList::iterator itCurr = collInstList.begin();
-	tInstList::iterator itEnd = collInstList.end();
+	tInstList::iterator itCurr = aCurrBranch.begin();
+	tInstList::iterator itEnd = aCurrBranch.end();
 
 	while(itCurr != itEnd)
 	{
 		if(itCurr->bIsJumpTarget)
 		{
 			tInstList::iterator itBlockBegin = itCurr;
-			tInstList::iterator itBlockEnd = itCurr + 1;
+			tInstList::iterator itBlockEnd = itCurr;
 
 			while(itBlockEnd != itEnd)
 			{
 				if((itBlockEnd->eType == IT_J) || (itBlockEnd->eType == IT_JR))
 				{
-					unsigned uInstructionCount = getInstructionCount(itBlockBegin, itBlockEnd + 1);
+					tInstList::iterator itBlockEndNext = itBlockEnd;
+					itBlockEndNext++;
+
+					unsigned uInstructionCount = getInstructionCount(itBlockBegin, itBlockEndNext);
 
 					if(uInstructionCount <= MAX_CLONE_INSTRUCTIONS)
 					{
-						tInstList *pInstList;
+						tInstList *pInstList = NULL;
 						tInstList::iterator itPosition;
 
-						unsigned uNumJumpSources = getCalcNumJumpSources(collInstList, itBlockBegin->uAddress, &pInstList, &itPosition);
-						//M_ASSERT(uNumJumpSources > 1);
+						unsigned uNumJumpSources = getCalcNumJumpSources(aFunction.collInstList, itBlockBegin->uAddress, &pInstList, &itPosition);
+						M_ASSERT(uNumJumpSources >= 1);
 
 						itPosition = pInstList->erase(itPosition);
-						pInstList->insert(itPosition, itBlockBegin, itBlockEnd + 1);
+						pInstList->insert(itPosition, itBlockBegin, itBlockEndNext);
 
 						return true;
 					}
@@ -543,11 +578,11 @@ static bool detectAndCloneSmallBlocks(tInstList &collInstList)
 
 bool optimizeInstructions(Function &aFunction, unsigned uCompletePassesDone)
 {
-	if(reassembleSingleJumpBlocks(aFunction.collInstList))
+	if(reassembleSingleJumpBlocks(aFunction, aFunction.collInstList))
 	{
 		return true;
 	}
-	
+
 	if(detectElseBranch(aFunction.collInstList))
 	{
 		return true;
@@ -568,7 +603,7 @@ bool optimizeInstructions(Function &aFunction, unsigned uCompletePassesDone)
 		return true;
 	}
 	
-	if(detectAndCloneSmallBlocks(aFunction.collInstList))
+	if(detectAndCloneSmallBlocks(aFunction, aFunction.collInstList))
 	{
 		return true;
 	}

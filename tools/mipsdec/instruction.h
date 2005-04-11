@@ -1,7 +1,7 @@
 #ifndef INSTRUCTION_H
 #define INSTRUCTION_H
 
-#include <vector>
+#include <list>
 #include "register.h"
 #include "symbols.h"
 
@@ -83,7 +83,7 @@ typedef enum {
 } tInstructionType;
 
 class Instruction;
-typedef std::vector<Instruction> tInstList;
+typedef std::list<Instruction> tInstList;
 
 class Instruction
 {
@@ -139,7 +139,7 @@ private:
 };
 
 void updateJumpTargets(tInstList &collInstList);
-bool resolveRegisterValue(const tInstList &collInstList, unsigned uInstIdx, tRegister eRegister, unsigned &uRegisterVal);
+bool resolveRegisterValue(const tInstList &collInstList, const tInstList::const_iterator &itCurrInstruction, tRegister eRegister, unsigned &uRegisterVal);
 void dumpInstructions(const tInstList &collInstList);
 const char *getInstrName(const Instruction &aInstruction);
 
