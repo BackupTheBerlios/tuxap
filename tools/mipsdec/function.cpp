@@ -47,6 +47,7 @@ bool Function::parseFromFile(const std::string &strFuncName, const std::string &
 	if((uSymIdx + 1) == Symbols::getCount())
 	{
 		M_ASSERT(false); // FIXME: TODO
+		uInstructionCount = 0;
 	}
 	else
 	{
