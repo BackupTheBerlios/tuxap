@@ -389,6 +389,6 @@ void generateCode(FILE *pDestFile, const Function &aFunction)
 	fprintf(pDestFile, "/* Stack offset: %d */\n", aFunction.uStackOffset);
 	fprintf(pDestFile, "void %s(void)\n", aFunction.strName.c_str());
 	fprintf(pDestFile, "{\n");
-	generateInstructionCode(pDestFile, aFunction.collInstList, 1);
+	generateInstructionCode(pDestFile, aFunction.m_collInstList, 1);
 	fprintf(pDestFile, "}\n");
 }

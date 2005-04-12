@@ -369,6 +369,13 @@ bool Instruction::isNOP(void)
 	}
 }
 
+void Instruction::deleteDelayed(void)
+{
+	M_ASSERT(!bDelayedDelete);
+
+	bDelayedDelete = true;
+}
+
 void Instruction::setDefaults(void)
 {
 	eFormat = IF_UNKNOWN;

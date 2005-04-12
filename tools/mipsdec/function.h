@@ -17,11 +17,15 @@ public:
 
 	void detectStackOffset(void);
 	bool parseFromFile(const std::string &strFuncName, const std::string &strBinFile);
+	void applyDelayedDeletes(void);
 
-	tInstList collInstList;
+	tInstList m_collInstList;
 	bool bHasStackOffset;
 	unsigned uStackOffset;
 	std::string strName;
+
+private:
+	bool applyDelayedDeletesRecursive(tInstList &collInstList);
 };
 
 #endif

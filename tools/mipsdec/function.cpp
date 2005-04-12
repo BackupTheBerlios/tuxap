@@ -3,8 +3,8 @@
 
 void Function::detectStackOffset(void)
 {
-	tInstList::const_iterator itCurr = collInstList.begin();
-	tInstList::const_iterator itEnd = collInstList.end();
+	tInstList::const_iterator itCurr = m_collInstList.begin();
+	tInstList::const_iterator itEnd = m_collInstList.end();
 
 	while(itCurr != itEnd)
 	{
@@ -91,11 +91,49 @@ bool Function::parseFromFile(const std::string &strFuncName, const std::string &
 		}
 		else
 		{
-			collInstList.push_back(aInstruction);
+			m_collInstList.push_back(aInstruction);
 		}
 	}
 	
 	fclose(pBinFile);
 
 	return true;
+}
+
+void Function::applyDelayedDeletes(void)
+{
+	while(applyDelayedDeletesRecursive(m_collInstList))
+	{
+	}
+}
+
+bool Function::applyDelayedDeletesRecursive(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		if(itCurr->bDelayedDelete)
+		{
+			M_ASSERT(itCurr->collInsertAfter.size() == 0);
+			collInstList.erase(itCurr);
+
+			return true;
+		}
+
+		if(applyDelayedDeletesRecursive(itCurr->collIfBranch))
+		{
+			return true;
+		}
+
+		if(applyDelayedDeletesRecursive(itCurr->collElseBranch))
+		{
+			return true;
+		}
+
+		itCurr++;
+	}
+
+	return false;
 }

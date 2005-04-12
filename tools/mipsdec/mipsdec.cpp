@@ -33,18 +33,19 @@ int main(int argc, char **argv)
 	
 	aFunction.parseFromFile(strFunction, strBinaryFile);
 	//dumpInstructions(collInstList);
-	resolveDelaySlots(aFunction.collInstList);
+	resolveDelaySlots(aFunction.m_collInstList);
 	//dumpInstructions(collInstList);
 
 	aFunction.detectStackOffset();
 
 	do {
-		updateJumpTargets(aFunction.collInstList);
+		aFunction.applyDelayedDeletes();
+		updateJumpTargets(aFunction.m_collInstList);
 		//dumpInstructions(collInstList);
 	} 
 	while(optimizeInstructions(aFunction));
 
-	updateJumpTargets(aFunction.collInstList);
+	updateJumpTargets(aFunction.m_collInstList);
 	//dumpInstructions(collInstList);
 
 	FILE *pCodeFile = fopen("code.c", "w");

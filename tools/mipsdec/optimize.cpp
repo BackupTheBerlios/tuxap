@@ -105,7 +105,7 @@ bool resolveDelaySlots(tInstList &collInstList)
 	return true;
 }
 
-static unsigned getCalcNumJumpSources(tInstList &collInstList, unsigned uAddress, tInstList **pInstList = NULL, tInstList::iterator *pPosition = NULL, unsigned uDepth = 0)
+static unsigned getCalcNumJumpSources(tInstList &collInstList, unsigned uAddress, Instruction **pLastJumpSource = NULL, unsigned uDepth = 0)
 {
 	M_ASSERT(uAddress != 0);
 	M_ASSERT(uAddress != 0xFFFFFFFF);
@@ -120,19 +120,14 @@ static unsigned getCalcNumJumpSources(tInstList &collInstList, unsigned uAddress
 		{
 			uNumJumpSources++;
 
-			if(pInstList)
+			if(pLastJumpSource)
 			{
-				*pInstList = &collInstList;
-			}
-
-			if(pPosition)
-			{
-				*pPosition = itCurr;
+				*pLastJumpSource = &(*itCurr);
 			}
 		}
 
-		uNumJumpSources += getCalcNumJumpSources(itCurr->collIfBranch, uAddress, pInstList, pPosition, uDepth + 1);
-		uNumJumpSources += getCalcNumJumpSources(itCurr->collElseBranch, uAddress, pInstList, pPosition, uDepth + 1);
+		uNumJumpSources += getCalcNumJumpSources(itCurr->collIfBranch, uAddress, pLastJumpSource, uDepth + 1);
+		uNumJumpSources += getCalcNumJumpSources(itCurr->collElseBranch, uAddress, pLastJumpSource, uDepth + 1);
 
 		itCurr++;
 	}
@@ -178,18 +173,18 @@ static bool reassembleSingleJumpBlocks(Function &aFunction, tInstList &aCurrBran
 					if(itBlockEnd->eType == IT_J)
 					{
 						/* Verify that the block has only one jump source */
-						tInstList *pInstList;
-						tInstList::iterator itSourcePosition;
+						Instruction *pLastJumpSource = NULL;
 
-						unsigned uNumJumpSources = getCalcNumJumpSources(aFunction.collInstList, itBlockBegin->uAddress, &pInstList, &itSourcePosition);
+						unsigned uNumJumpSources = getCalcNumJumpSources(aFunction.m_collInstList, itBlockBegin->uAddress, &pLastJumpSource);
 						if(uNumJumpSources == 1)
 						{
 							tInstList::iterator itBlockEndNext = itBlockEnd;
 							itBlockEndNext++;
 
 							/* Yeah! Found one... move block into if branch*/
-							itSourcePosition = pInstList->erase(itSourcePosition);
-							pInstList->insert(itSourcePosition, itBlockBegin, itBlockEndNext);
+							M_ASSERT(pLastJumpSource->collInsertAfter.size() == 0);
+							pLastJumpSource->deleteDelayed();
+							pLastJumpSource->collInsertAfter.insert(pLastJumpSource->collInsertAfter.end(), itBlockBegin, itBlockEndNext);
 							aCurrBranch.erase(itBlockBegin, itBlockEndNext);
 
 							return true;
@@ -494,7 +489,7 @@ static bool detectEpilogProlog(Function &aFunction)
 		return false;
 	}
 
-	return stripEpilogProlog(aFunction.collInstList, aFunction.uStackOffset);
+	return stripEpilogProlog(aFunction.m_collInstList, aFunction.uStackOffset);
 }
 
 static bool stripNops(tInstList &collInstList)
@@ -571,14 +566,14 @@ static bool detectAndCloneSmallBlocks(Function &aFunction, tInstList &aCurrBranc
 
 					if(uInstructionCount <= MAX_CLONE_INSTRUCTIONS)
 					{
-						tInstList *pInstList = NULL;
-						tInstList::iterator itPosition;
+						Instruction *pLastJumpSource = NULL;
 
-						unsigned uNumJumpSources = getCalcNumJumpSources(aFunction.collInstList, itBlockBegin->uAddress, &pInstList, &itPosition);
+						unsigned uNumJumpSources = getCalcNumJumpSources(aFunction.m_collInstList, itBlockBegin->uAddress, &pLastJumpSource);
 						M_ASSERT(uNumJumpSources >= 1);
+						M_ASSERT(pLastJumpSource->collInsertAfter.size() == 0);
 
-						itPosition = pInstList->erase(itPosition);
-						pInstList->insert(itPosition, itBlockBegin, itBlockEndNext);
+						pLastJumpSource->deleteDelayed();
+						pLastJumpSource->collInsertAfter.insert(pLastJumpSource->collInsertAfter.end(), itBlockBegin, itBlockEndNext);
 
 						return true;
 					}
@@ -598,22 +593,22 @@ static bool detectAndCloneSmallBlocks(Function &aFunction, tInstList &aCurrBranc
 
 bool optimizeInstructions(Function &aFunction)
 {
-	if(reassembleSingleJumpBlocks(aFunction, aFunction.collInstList))
+	if(reassembleSingleJumpBlocks(aFunction, aFunction.m_collInstList))
 	{
 		return true;
 	}
 
-	if(detectElseBranch(aFunction.collInstList))
+	if(detectElseBranch(aFunction.m_collInstList))
 	{
 		return true;
 	}
 	
-	if(detectOnlyElseBranch(aFunction.collInstList))
+	if(detectOnlyElseBranch(aFunction.m_collInstList))
 	{
 		return true;
 	}
 	
-	if(detectEndOfBranchJumps(aFunction.collInstList))
+	if(detectEndOfBranchJumps(aFunction.m_collInstList))
 	{
 		return true;
 	}
@@ -623,12 +618,12 @@ bool optimizeInstructions(Function &aFunction)
 		return true;
 	}
 	
-	if(stripNops(aFunction.collInstList))
+	if(stripNops(aFunction.m_collInstList))
 	{
 		return true;
 	}
 
-	if(detectAndCloneSmallBlocks(aFunction, aFunction.collInstList))
+	if(detectAndCloneSmallBlocks(aFunction, aFunction.m_collInstList))
 	{
 		return true;
 	}

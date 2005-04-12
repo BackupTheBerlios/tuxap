@@ -89,6 +89,7 @@ class Instruction
 {
 public:
 	Instruction(void) :
+			bDelayedDelete(false),
 			bDelaySlotReordered(false),
 			bIgnoreJump(false)
 	{
@@ -103,6 +104,7 @@ public:
 	tInstructionDelaySlot getDelaySlotType(void);
 	tInstructionClass getClassType(void);
 	bool isNOP(void);
+	void deleteDelayed(void);
 
 	unsigned uAddress;
 	tInstructionType eType;
@@ -118,7 +120,9 @@ public:
 
 	tInstList collIfBranch;
 	tInstList collElseBranch;
+	tInstList collInsertAfter;
 
+	bool bDelayedDelete;
 	bool bDelaySlotReordered;
 	bool bIgnoreJump;
 	bool bIsJumpTarget;
