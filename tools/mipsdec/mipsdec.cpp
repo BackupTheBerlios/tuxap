@@ -37,15 +37,16 @@ int main(int argc, char **argv)
 	//dumpInstructions(collInstList);
 
 	aFunction.detectStackOffset();
+	updateJumpTargets(aFunction.m_collInstList);
 
-	do {
+	while(optimizeInstructions(aFunction))
+	{
+		aFunction.applyDelayedInserts();
 		aFunction.applyDelayedDeletes();
 		updateJumpTargets(aFunction.m_collInstList);
 		//dumpInstructions(collInstList);
 	} 
-	while(optimizeInstructions(aFunction));
 
-	updateJumpTargets(aFunction.m_collInstList);
 	//dumpInstructions(collInstList);
 
 	FILE *pCodeFile = fopen("code.c", "w");

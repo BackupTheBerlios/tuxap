@@ -137,3 +137,44 @@ bool Function::applyDelayedDeletesRecursive(tInstList &collInstList)
 
 	return false;
 }
+
+void Function::applyDelayedInserts(void)
+{
+	while(applyDelayedInsertsRecursive(m_collInstList))
+	{
+	}
+}
+
+bool Function::applyDelayedInsertsRecursive(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		if(itCurr->collInsertAfter.size() > 0)
+		{
+			tInstList::iterator itNext = itCurr;
+			itNext++;
+
+			collInstList.insert(itNext, itCurr->collInsertAfter.begin(), itCurr->collInsertAfter.end());
+			itCurr->collInsertAfter.clear();
+
+			return true;
+		}
+
+		if(applyDelayedInsertsRecursive(itCurr->collIfBranch))
+		{
+			return true;
+		}
+
+		if(applyDelayedInsertsRecursive(itCurr->collElseBranch))
+		{
+			return true;
+		}
+
+		itCurr++;
+	}
+
+	return false;
+}

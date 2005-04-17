@@ -18,6 +18,7 @@ public:
 	void detectStackOffset(void);
 	bool parseFromFile(const std::string &strFuncName, const std::string &strBinFile);
 	void applyDelayedDeletes(void);
+	void applyDelayedInserts(void);
 
 	tInstList m_collInstList;
 	bool bHasStackOffset;
@@ -26,6 +27,7 @@ public:
 
 private:
 	bool applyDelayedDeletesRecursive(tInstList &collInstList);
+	bool applyDelayedInsertsRecursive(tInstList &collInstList);
 };
 
 #endif
