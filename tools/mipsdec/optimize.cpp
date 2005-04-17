@@ -262,15 +262,13 @@ static bool detectElseBranch(tInstList &collInstList)
 						break;
 					}
 
-#if 0
 					if(itBlockNext == itEnd)
 					{
 						/* Move block into else branch */
 						itCurr->collElseBranch.insert(itCurr->collElseBranch.begin(), itBlockBegin, itBlockNext);
 						collInstList.erase(itBlockBegin, itBlockNext);
-						return false;
+						return true;
 					}
-#endif
 
 					itBlockEnd++;
 				}
@@ -363,7 +361,7 @@ static bool removeClosingJump(tInstList &collInstList, unsigned uJumpTarget)
 
 	if(itCurr != itEnd)
 	{
-		if(itCurr->uJumpAddress == uJumpTarget)
+		if((itCurr->uJumpAddress == uJumpTarget) && (!itCurr->bIgnoreJump))
 		{
 			collInstList.pop_back();
 			return true;
@@ -521,6 +519,45 @@ static bool stripNops(tInstList &collInstList)
 	return false;
 }
 
+static bool detectReturningIfBranch(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		if((itCurr->collIfBranch.size() > 0) && (itCurr->collElseBranch.size() > 0))
+		{
+			tInstList::reverse_iterator itLastIf = itCurr->collIfBranch.rbegin();
+		
+			if((itLastIf->eType == IT_JR) && (itLastIf->eRS == R_RA))
+			{
+				tInstList::iterator itNext = itCurr;
+				itNext++;
+				
+				collInstList.insert(itNext, itCurr->collElseBranch.begin(), itCurr->collElseBranch.end());
+				itCurr->collElseBranch.clear();
+				
+				return true;
+			}
+		}
+		
+		if(detectReturningIfBranch(itCurr->collIfBranch))
+		{
+			return true;
+		}
+
+		if(detectReturningIfBranch(itCurr->collElseBranch))
+		{
+			return true;
+		}
+
+		itCurr++;
+	}
+	
+	return false;
+}
+
 static unsigned getInstructionCount(const tInstList::iterator &itBlockBegin, const tInstList::iterator &itBlockEnd)
 {
 	unsigned uInstructionCount = 0;
@@ -593,40 +630,61 @@ static bool detectAndCloneSmallBlocks(Function &aFunction, tInstList &aCurrBranc
 
 bool optimizeInstructions(Function &aFunction)
 {
+#if 1
 	if(reassembleSingleJumpBlocks(aFunction, aFunction.m_collInstList))
 	{
 		return true;
 	}
+#endif
 
+#if 1
 	if(detectElseBranch(aFunction.m_collInstList))
 	{
 		return true;
 	}
-	
+#endif
+
+#if 1
 	if(detectOnlyElseBranch(aFunction.m_collInstList))
 	{
 		return true;
 	}
-	
+#endif
+
+#if 1
 	if(detectEndOfBranchJumps(aFunction.m_collInstList))
 	{
 		return true;
 	}
+#endif
 
+#if 1
 	if(detectEpilogProlog(aFunction))
 	{
 		return true;
 	}
-	
+#endif
+
+#if 1
 	if(stripNops(aFunction.m_collInstList))
 	{
 		return true;
 	}
+#endif
 
+#if 1
+	if(detectReturningIfBranch(aFunction.m_collInstList))
+	{
+		return true;
+	}
+#endif
+
+#if 1
 	if(detectAndCloneSmallBlocks(aFunction, aFunction.m_collInstList))
 	{
 		return true;
 	}
+#endif
 
 	return false;
 }
