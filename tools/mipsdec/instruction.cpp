@@ -275,6 +275,8 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 				}
 			}
 			break;
+		default:
+			break;
 	}
 
 	return true;
@@ -574,6 +576,8 @@ bool resolveRegisterValue(const tInstList &collInstList, const tInstList::const_
 
 					return true;
 				}
+			default:
+				break;
 		}
 
 		if(!bGotAbsoluteVal)

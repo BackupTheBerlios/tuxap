@@ -1,5 +1,5 @@
 CC=g++
-CFLAGS=-O3 -g0
+CFLAGS=-O3 -g0 -Wall
 SOURCES=mipsdec.cpp function.cpp symbols.cpp instruction.cpp register.cpp optimize.cpp codegen.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
 VPATH=..
