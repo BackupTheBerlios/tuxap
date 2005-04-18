@@ -1,14 +1,38 @@
 #include "parameter.h"
 #include "common.h"
+#include <string>
 
 #define DECLARE_BASIC_TYPE(size, name) { size, name	}
 
-const tTypeInfo aTypeInt = DECLARE_BASIC_TYPE(4, "int");
-const tTypeInfo aTypeUnsignedInt = DECLARE_BASIC_TYPE(4, "unsigned int");
-const tTypeInfo aTypeUnsignedShort = DECLARE_BASIC_TYPE(2, "unsigned short");
-const tTypeInfo aTypeUnsignedLong = DECLARE_BASIC_TYPE(4, "unsigned long");
+static const tTypeInfo aTypeVoid = DECLARE_BASIC_TYPE(0, "void");
+static const tTypeInfo aTypeChar = DECLARE_BASIC_TYPE(1, "char");
+static const tTypeInfo aTypeUnsignedChar = DECLARE_BASIC_TYPE(1, "unsigned char");
+static const tTypeInfo aTypeInt = DECLARE_BASIC_TYPE(4, "int");
+static const tTypeInfo aTypeUnsignedInt = DECLARE_BASIC_TYPE(4, "unsigned int");
+static const tTypeInfo aTypeUnsignedShort = DECLARE_BASIC_TYPE(2, "unsigned short");
+static const tTypeInfo aTypeUnsignedLong = DECLARE_BASIC_TYPE(4, "unsigned long");
+static const tTypeInfo aTypeTodo = DECLARE_BASIC_TYPE(4, "void");
 
-const tTypeInfo aTypePciDevice = { 0, "struct pci_device_id",
+static const tTypeInfo aTypeListHead = { 0, "struct list_head",
+	{
+		{"next", TF_BY_REFERENCE, &aTypeListHead},
+		{"prev", TF_BY_REFERENCE, &aTypeListHead},
+	}
+};
+
+static const tTypeInfo aTypeResource = { 0, "struct resource",
+	{
+		{"name", TF_BY_REFERENCE | TF_CONST, &aTypeChar},
+		{"start", TF_NONE, &aTypeUnsignedLong},
+		{"end", TF_NONE, &aTypeUnsignedLong},
+		{"flags", TF_NONE, &aTypeUnsignedLong},
+		{"parent", TF_BY_REFERENCE, &aTypeResource},
+		{"silbing", TF_BY_REFERENCE, &aTypeResource},
+		{"child", TF_BY_REFERENCE, &aTypeResource},
+	}
+};
+
+static const tTypeInfo aTypePciDeviceId = { 0, "struct pci_device_id",
 	{
 		{"vendor", TF_NONE, &aTypeUnsignedInt},
 		{"device", TF_NONE, &aTypeUnsignedInt},
@@ -20,47 +44,33 @@ const tTypeInfo aTypePciDevice = { 0, "struct pci_device_id",
 	}
 };
 
-const tTypeInfo aTypeListHead = { 0, "struct list_head",
-	{
-		{"next", TF_BY_REFERENCE, &aTypeListHead},
-		{"prev", TF_BY_REFERENCE, &aTypeListHead},
-	}
-};
-
 extern const tTypeInfo aTypePciDev;
 
-const tTypeInfo aTypePciBus = { 0, "struct pci_bus",
+static const tTypeInfo aTypePciBus = { 0, "struct pci_bus",
 	{
 		{"node", TF_NONE, &aTypeListHead},
 		{"parent", TF_BY_REFERENCE, &aTypePciBus},
 		{"children", TF_NONE, &aTypeListHead},
 		{"devices", TF_NONE, &aTypeListHead},
 		{"self", TF_BY_REFERENCE, &aTypePciDev},
+		{"resource", TF_BY_REFERENCE, &aTypeResource, 4},
+		{"ops", TF_BY_REFERENCE, &aTypeTodo}, // struct pci_ops
+		{"sysdata", TF_BY_REFERENCE, &aTypeVoid},
+		{"procdir", TF_BY_REFERENCE, &aTypeTodo}, // struct proc_dir_entry
+		{"number", TF_NONE, &aTypeUnsignedChar},
+		{"primary", TF_NONE, &aTypeUnsignedChar},
+		{"secondary", TF_NONE, &aTypeUnsignedChar},
+		{"subordinate", TF_NONE, &aTypeUnsignedChar},
+		{"name", TF_NONE, &aTypeUnsignedChar, 48},
+		{"vendor", TF_NONE, &aTypeUnsignedShort},
+		{"device", TF_NONE, &aTypeUnsignedShort},
+		{"serial", TF_NONE, &aTypeUnsignedInt},
+		{"pnpver", TF_NONE, &aTypeUnsignedChar},
+		{"productver", TF_NONE, &aTypeUnsignedChar},
+		{"checksum", TF_NONE, &aTypeUnsignedChar},
+		{"pad1", TF_NONE, &aTypeUnsignedChar},
 	}
 };
-
-#if 0
-        struct resource *resource[4];   /* address space routed to this bus */
-
-        struct pci_ops  *ops;           /* configuration access functions */
-        void            *sysdata;       /* hook for sys-specific extension */
-        struct proc_dir_entry *procdir; /* directory entry in /proc/bus/pci */
-
-        unsigned char   number;         /* bus number */
-        unsigned char   primary;        /* number of primary bridge */
-        unsigned char   secondary;      /* number of secondary bridge */
-        unsigned char   subordinate;    /* max number of subordinate buses */
-
-        char            name[48];
-        unsigned short  vendor;
-        unsigned short  device;
-        unsigned int    serial;         /* serial number */
-        unsigned char   pnpver;         /* Plug & Play version */
-        unsigned char   productver;     /* product version */
-        unsigned char   checksum;       /* if zero - checksum passed */
-        unsigned char   pad1;
-};
-#endif
 
 const tTypeInfo aTypePciDev = { 0, "struct pci_dev",
 	{
@@ -127,3 +137,23 @@ struct pci_dev {
         int (*deactivate)(struct pci_dev *dev);
 };
 #endif
+
+static tFunctionParameters collFunctionParameters[] = 
+{
+#include "user_function_parameter.inc"
+};
+
+#define NUM_FUNCTION_PARAMETERS (sizeof(collFunctionParameters) / sizeof(collFunctionParameters[0]))
+
+tParameter *getFunctionParameters(const std::string &strFunctionName)
+{
+	for(unsigned uIdx = 0; uIdx < NUM_FUNCTION_PARAMETERS; uIdx++)
+	{
+		if(strFunctionName == collFunctionParameters[uIdx].pName)
+		{
+			return collFunctionParameters[uIdx].collParameters;
+		}
+	}
+
+	return NULL;
+}

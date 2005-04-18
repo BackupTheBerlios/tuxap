@@ -1,5 +1,6 @@
 #include "instruction.h"
 #include "function.h"
+#include "parameter.h"
 #include "common.h"
 
 std::string getIndentStr(unsigned uDepth)
@@ -387,7 +388,30 @@ void generateCode(FILE *pDestFile, const Function &aFunction)
 {
 	fprintf(pDestFile, "#include \"../mipsdec_helper.h\"\n\n");
 	fprintf(pDestFile, "/* Stack offset: %d */\n", aFunction.uStackOffset);
-	fprintf(pDestFile, "void %s(void)\n", aFunction.strName.c_str());
+
+	tParameter *pParams = getFunctionParameters(aFunction.strName);
+
+	if(!pParams)
+	{
+		fprintf(pDestFile, "void %s(void)\n", aFunction.strName.c_str());
+	}
+	else
+	{
+		fprintf(pDestFile, "%s %s(", pParams[0].pInfo->pName, aFunction.strName.c_str());
+		unsigned uIdx = 1;
+		while(pParams[uIdx].pName)
+		{
+			fprintf(pDestFile, "%s%s%s %s%s", 
+				(uIdx > 1) ? ", " : "",
+				(pParams[uIdx].uFlags & TF_CONST) ? "const " : "",
+				pParams[uIdx].pInfo->pName,
+				(pParams[uIdx].uFlags & TF_BY_REFERENCE) ? "*" : "",
+				pParams[uIdx].pName);
+			uIdx++;
+		}
+		fprintf(pDestFile, ")\n");
+	}
+
 	fprintf(pDestFile, "{\n");
 	generateInstructionCode(pDestFile, aFunction.m_collInstList, 1);
 	fprintf(pDestFile, "}\n");
