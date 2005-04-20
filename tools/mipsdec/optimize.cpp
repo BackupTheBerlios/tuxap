@@ -300,6 +300,9 @@ static void invertCondition(Instruction &aInstruction)
 		case IT_BEQ:
 			aInstruction.eType = IT_BNE;
 			break;
+		case IT_BEQL:
+			aInstruction.eType = IT_BNEL;
+			break;
 		case IT_BNE:
 			aInstruction.eType = IT_BEQ;
 			break;
@@ -558,6 +561,52 @@ static bool detectReturningIfBranch(tInstList &collInstList)
 	return false;
 }
 
+static bool detectIdenticalIfElseBranch(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		if((itCurr->collIfBranch.size() > 0) && (itCurr->collElseBranch.size() > 0))
+		{
+			tInstList::reverse_iterator itLastIf = itCurr->collIfBranch.rbegin();
+			tInstList::reverse_iterator itLastElse = itCurr->collElseBranch.rbegin();
+		
+			if((itLastIf->collIfBranch.size() == 0) && (itLastElse->collIfBranch.size() == 0) && (itLastIf->isSame(*itLastElse)))
+			{
+				M_ASSERT(itLastIf->collElseBranch.size() == 0);
+				M_ASSERT(itLastElse->collElseBranch.size() == 0);
+
+				Instruction aInstruction = *itLastIf;
+				tInstList::iterator itNext = itCurr;
+				itNext++;
+
+				itCurr->collIfBranch.pop_back();
+				itCurr->collElseBranch.pop_back();
+
+				collInstList.insert(itNext, aInstruction);
+			
+				return true;
+			}
+		}
+		
+		if(detectIdenticalIfElseBranch(itCurr->collIfBranch))
+		{
+			return true;
+		}
+
+		if(detectIdenticalIfElseBranch(itCurr->collElseBranch))
+		{
+			return true;
+		}
+
+		itCurr++;
+	}
+	
+	return false;
+}
+
 static unsigned getInstructionCount(const tInstList::iterator &itBlockBegin, const tInstList::iterator &itBlockEnd)
 {
 	unsigned uInstructionCount = 0;
@@ -674,6 +723,13 @@ bool optimizeInstructions(Function &aFunction)
 
 #if 1
 	if(detectReturningIfBranch(aFunction.m_collInstList))
+	{
+		return true;
+	}
+#endif
+
+#if 1
+	if(detectIdenticalIfElseBranch(aFunction.m_collInstList))
 	{
 		return true;
 	}
