@@ -45,6 +45,7 @@ int main(int argc, char **argv)
 		aFunction.applyDelayedDeletes();
 		updateJumpTargets(aFunction.m_collInstList);
 		//dumpInstructions(collInstList);
+		aFunction.uOptimizationPasses++;
 	} 
 
 	//dumpInstructions(collInstList);

@@ -387,7 +387,8 @@ void generateInstructionCode(FILE *pDestFile, const tInstList &collInstList, uns
 void generateCode(FILE *pDestFile, const Function &aFunction)
 {
 	fprintf(pDestFile, "#include \"../mipsdec_helper.h\"\n\n");
-	fprintf(pDestFile, "/* Stack offset: %d */\n", aFunction.uStackOffset);
+	fprintf(pDestFile, "/* Optimization passes: %4d */\n", aFunction.uOptimizationPasses);
+	fprintf(pDestFile, "/* Stack offset.......: %4d */\n", aFunction.uStackOffset);
 
 	tParameter *pParams = getFunctionParameters(aFunction.strName);
 

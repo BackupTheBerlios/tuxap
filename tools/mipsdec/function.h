@@ -11,6 +11,7 @@ class Function
 public:
 	Function(void) :
 		bHasStackOffset(false),
+		uOptimizationPasses(0),
 		uStackOffset(0)
 	{
 	}
@@ -22,6 +23,7 @@ public:
 
 	tInstList m_collInstList;
 	bool bHasStackOffset;
+	unsigned uOptimizationPasses;
 	unsigned uStackOffset;
 	std::string strName;
 
