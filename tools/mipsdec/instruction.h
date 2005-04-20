@@ -63,7 +63,9 @@ typedef enum {
 	IT_MFC0,		// No delay slot
 	IT_MTC0,		// No delay slot
 	IT_MULT,		// No delay slot
+	IT_MULTU,		// No delay slot
 	IT_NOP,			// No delay slot
+	IT_NOR,			// No delay slot
 	IT_OR,			// No delay slot
 	IT_ORI,			// No delay slot
 	IT_SB,			// No delay slot
@@ -73,6 +75,7 @@ typedef enum {
 	IT_SLTIU,		// No delay slot
 	IT_SLTU,		// No delay slot
 	IT_SRA,			// No delay slot
+	IT_SRAV,		// No delay slot
 	IT_SRL,			// No delay slot
 	IT_SSNOP,		// No delay slot
 	IT_SUBU,		// No delay slot
@@ -105,6 +108,7 @@ public:
 	tInstructionClass getClassType(void);
 	bool isNOP(void);
 	void deleteDelayed(void);
+	bool isSame(const Instruction &aOtherInstruction) const;
 
 	unsigned uAddress;
 	tInstructionType eType;

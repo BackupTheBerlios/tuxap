@@ -59,7 +59,9 @@ static tInstructionInfo s_InstructionInfo[] =
 	DECLARE_SPECIAL_OPCODE(0x10, MFHI,	IF_RD,		RF_RD,		IDS_NONE),
 	DECLARE_COP0_OPCODE   (0x04, MTC0,	IF_RTRDSEL,	RF_NONE,	IDS_NONE),
 	DECLARE_SPECIAL_OPCODE(0x18, MULT,	IF_RSRT,	RF_NONE,	IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x19, MULTU,	IF_RSRT,	RF_NONE,	IDS_NONE),
 	DECLARE_VIRTUAL_OPCODE(      NOP,		IF_NOARG,	RF_NONE,	IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x27, NOR,	IF_RSRTRD,	RF_RD,	IDS_NONE),
 	DECLARE_SPECIAL_OPCODE(0x25, OR,		IF_RSRTRD,	RF_RD,		IDS_NONE),
 	DECLARE_REGULAR_OPCODE(0x0D, ORI,		IF_RSRTUI,	RF_RT,		IDS_NONE),
 	DECLARE_REGULAR_OPCODE(0x28, SB,		IF_RSRTSI,	RF_NONE,	IDS_NONE),
@@ -69,6 +71,7 @@ static tInstructionInfo s_InstructionInfo[] =
 	DECLARE_REGULAR_OPCODE(0x0B, SLTIU,	IF_RSRTSI,	RF_RT,		IDS_NONE),
 	DECLARE_SPECIAL_OPCODE(0x2B, SLTU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
 	DECLARE_SPECIAL_OPCODE(0x03, SRA,		IF_RTRDSA,	RF_RD,		IDS_NONE),
+	DECLARE_SPECIAL_OPCODE(0x07, SRAV,		IF_RSRTRD,	RF_RD,		IDS_NONE),
 	DECLARE_SPECIAL_OPCODE(0x02, SRL,		IF_RTRDSA,	RF_RD,		IDS_NONE),
 	DECLARE_VIRTUAL_OPCODE(      SSNOP,	IF_NOARG,	RF_NONE,	IDS_NONE),
 	DECLARE_SPECIAL_OPCODE(0x23, SUBU,	IF_RSRTRD,	RF_RD,		IDS_NONE),
@@ -169,7 +172,7 @@ bool decodeData(unsigned uInstructionData, unsigned &uInfoIdx)
 		}
 	}
 
-#if 0
+#if 1
 	unsigned uOp1 = uOpcode >> 3;
 	unsigned uOp2 = uOpcode & 7;
 	unsigned uSpecialOpcode = uInstructionData & 0x3F;
@@ -239,6 +242,7 @@ bool Instruction::parse(unsigned uInstructionData, unsigned uInstructionAddress)
 		case IT_BEQ:
 		case IT_BEQL:
 		case IT_BGTZ:
+		case IT_BLEZ:
 		case IT_BLTZ:
 		case IT_BNE:
 		case IT_BNEL:
@@ -376,6 +380,27 @@ void Instruction::deleteDelayed(void)
 	M_ASSERT(!bDelayedDelete);
 
 	bDelayedDelete = true;
+}
+
+bool Instruction::isSame(const Instruction &aOtherInstruction) const
+{
+	if((eType != aOtherInstruction.eType) ||
+		(eFormat != aOtherInstruction.eFormat) ||
+		(eRS != aOtherInstruction.eRS) ||
+		(eRT != aOtherInstruction.eRT) ||
+		(eRD != aOtherInstruction.eRD) ||
+		(uUI != aOtherInstruction.uUI) ||
+		(iSI != aOtherInstruction.iSI) ||
+		(uSEL != aOtherInstruction.uSEL) ||
+		(uSA != aOtherInstruction.uSA))
+	{
+		return false;
+	}
+
+
+	M_ASSERT(uJumpAddress == aOtherInstruction.uJumpAddress);
+
+	return true;
 }
 
 void Instruction::setDefaults(void)
@@ -519,7 +544,63 @@ static bool isJumpTarget(const tInstList &collInstList, unsigned uAddress)
 	return false;
 }
 
+void getJumpTargets(tInstList &collInstList, std::vector<unsigned> &collJumpTargets)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	while(itCurr != itEnd)
+	{
+		if((itCurr->uJumpAddress != 0) && (!itCurr->bIgnoreJump))
+		{
+			collJumpTargets.push_back(itCurr->uJumpAddress);
+		}
+
+		getJumpTargets(itCurr->collIfBranch, collJumpTargets);
+		getJumpTargets(itCurr->collElseBranch, collJumpTargets);
+
+		itCurr++;
+	}
+}
+
+void markJumpTargets(tInstList &collInstList, const std::vector<unsigned> &collJumpTargets)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	size_t uNumJumpTargets = collJumpTargets.size();
+
+	while(itCurr != itEnd)
+	{
+		itCurr->bIsJumpTarget = false;
+
+		for(unsigned uIdx = 0; uIdx < uNumJumpTargets; uIdx++)
+		{
+			if(itCurr->uAddress == collJumpTargets[uIdx])
+			{
+				itCurr->bIsJumpTarget = true;
+			}
+		}
+
+		markJumpTargets(itCurr->collIfBranch, collJumpTargets);
+		markJumpTargets(itCurr->collElseBranch, collJumpTargets);
+
+		itCurr++;
+	}
+}
+
 void updateJumpTargets(tInstList &collInstList)
+{
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+
+	std::vector<unsigned> collJumpTargets;
+
+	getJumpTargets(collInstList, collJumpTargets);
+	markJumpTargets(collInstList, collJumpTargets);
+}
+
+void updateJumpTargetsOld(tInstList &collInstList)
 {
 	tInstList::iterator itCurr = collInstList.begin();
 	tInstList::iterator itEnd = collInstList.end();
