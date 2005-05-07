@@ -35,13 +35,6 @@ config MISDN_HFCPCI
 	  Enable support for card with Cologne Chips Design HFC PCI based
 	  cards.
 
-config MISDN_HFCUSB
-	bool "Support for HFC USB cards"
-	depends on USB
-	help
-	  Enable support for card with Cologne Chips Design HFC USB based
-	  cards.
-
 config MISDN_HFCMULTI
 	bool "Support for HFC multiport cards (HFC-4S/8S/E1)"
 	depends on PCI
@@ -66,6 +59,13 @@ config HFCMULTI_PCIMEM
 	  If unsure, say 'N'.
 
 endif
+
+config MISDN_HFCUSB
+	bool "Support for HFC-S USB based TAs"
+	depends on USB && EXPERIMENTAL
+	help
+	  Enable support for USB ISDN TAs with Cologne Chip AG's
+	  HFC-S USB ISDN Controller
 
 config MISDN_SPEEDFAX
 	bool "Support for Sedlbauer Speedfax+"

@@ -1,4 +1,4 @@
-/* $Id: udevice.c,v 1.14 2004/07/08 00:49:48 keil Exp $
+/* $Id: udevice.c,v 1.15 2004/11/19 18:47:40 jolly Exp $
  *
  * Copyright 2000  by Karsten Keil <kkeil@isdn4linux.de>
  *
