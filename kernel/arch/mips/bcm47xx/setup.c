@@ -14,8 +14,6 @@
 #include <sbconfig.h>
 #include <bcmdevs.h>
 
-#include <ssbcore.h>
-
 #if 1
 
 //#define SER_PORT1(reg)	(*((volatile unsigned char *)(0xbf800000+reg)))
@@ -42,7 +40,7 @@ static void
 serial_add(void *regs, uint irq, uint baud_base, uint reg_shift)
 {
 	struct uart_port s;
-
+	
 	memset(&s, 0, sizeof(s));
 
 	s.line = ser_line++;
@@ -87,16 +85,14 @@ static void bcm47xx_machine_halt(void)
 	while (1);
 }
 
-//static struct sb_bus bus;
-
 static int __init bcm47xx_init(void)
 {
-//	sb_bus_add(&bus, SB_BUS, (void *)SB_ENUM_BASE, SB_ENUM_LIM - SB_ENUM_BASE, "bcm47xx", NULL);
-
 	sbh = sb_kattach();
 	sb_mips_init(sbh);
 	sbpci_init(sbh);
+#ifndef CONFIG_KGDB
 	sb_serial_init(sbh, serial_add);
+#endif
 
 	_machine_restart = bcm47xx_machine_restart;
 	_machine_halt = bcm47xx_machine_halt;

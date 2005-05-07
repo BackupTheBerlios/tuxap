@@ -11,14 +11,13 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/irq_cpu.h>
-#include <asm/gdb-stub.h>
 
 extern asmlinkage void bcm47xx_irq_handler(void);
 
 void bcm47xx_irq_dispatch(struct pt_regs *regs)
 {
 	u32 cause;
-
+	
 	cause = read_c0_cause() & read_c0_status() & CAUSEF_IP;
 
 #ifdef CONFIG_KERNPROF
@@ -45,8 +44,4 @@ void __init arch_init_irq(void)
 {
 	set_except_vector(0, bcm47xx_irq_handler);
 	mips_cpu_irq_init(0);
-	
-//	printk("Breaking into debugger...\n");
-//	set_debug_traps();
-//	breakpoint(); 
 }
