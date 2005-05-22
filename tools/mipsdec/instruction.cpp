@@ -392,13 +392,11 @@ bool Instruction::isSame(const Instruction &aOtherInstruction) const
 		(uUI != aOtherInstruction.uUI) ||
 		(iSI != aOtherInstruction.iSI) ||
 		(uSEL != aOtherInstruction.uSEL) ||
-		(uSA != aOtherInstruction.uSA))
+		(uSA != aOtherInstruction.uSA) ||
+		(uJumpAddress != aOtherInstruction.uJumpAddress))
 	{
 		return false;
 	}
-
-
-	M_ASSERT(uJumpAddress == aOtherInstruction.uJumpAddress);
 
 	return true;
 }
