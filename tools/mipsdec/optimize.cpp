@@ -262,6 +262,7 @@ static bool detectElseBranch(tInstList &collInstList)
 						break;
 					}
 
+#if 0
 					if(itBlockNext == itEnd)
 					{
 						/* Move block into else branch */
@@ -269,6 +270,7 @@ static bool detectElseBranch(tInstList &collInstList)
 						collInstList.erase(itBlockBegin, itBlockNext);
 						return true;
 					}
+#endif
 
 					itBlockEnd++;
 				}
@@ -306,8 +308,14 @@ static void invertCondition(Instruction &aInstruction)
 		case IT_BNE:
 			aInstruction.eType = IT_BEQ;
 			break;
+		case IT_BNEL:
+			aInstruction.eType = IT_BEQL;
+			break;
 		case IT_BGTZ:
 			aInstruction.eType = IT_BLEZ;
+			break;
+		case IT_BLEZ:
+			aInstruction.eType = IT_BGTZ;
 			break;
 		case IT_BLTZ:
 			aInstruction.eType = IT_BGEZ;
@@ -452,6 +460,10 @@ static bool stripEpilogProlog(tInstList &collInstList, unsigned uStackOffset)
 				case 16:
 				case 20:
 				case 24:
+				/*case 28:
+				case 32:
+				case 36:
+				case 40:*/
 					if(itCurr->bIsJumpTarget)
 					{
 						itCurr->makeNOP();
@@ -522,7 +534,7 @@ static bool stripNops(tInstList &collInstList)
 	return false;
 }
 
-static bool detectReturningIfBranch(tInstList &collInstList)
+static bool detectEndingIfBranch(tInstList &collInstList)
 {
 	tInstList::iterator itCurr = collInstList.begin();
 	tInstList::iterator itEnd = collInstList.end();
@@ -533,7 +545,7 @@ static bool detectReturningIfBranch(tInstList &collInstList)
 		{
 			tInstList::reverse_iterator itLastIf = itCurr->collIfBranch.rbegin();
 		
-			if((itLastIf->eType == IT_JR) && (itLastIf->eRS == R_RA))
+			if((itLastIf->eType == IT_J) || ((itLastIf->eType == IT_JR) && (itLastIf->eRS == R_RA)))
 			{
 				tInstList::iterator itNext = itCurr;
 				itNext++;
@@ -545,12 +557,12 @@ static bool detectReturningIfBranch(tInstList &collInstList)
 			}
 		}
 		
-		if(detectReturningIfBranch(itCurr->collIfBranch))
+		if(detectEndingIfBranch(itCurr->collIfBranch))
 		{
 			return true;
 		}
 
-		if(detectReturningIfBranch(itCurr->collElseBranch))
+		if(detectEndingIfBranch(itCurr->collElseBranch))
 		{
 			return true;
 		}
@@ -643,7 +655,7 @@ static bool detectAndCloneSmallBlocks(Function &aFunction, tInstList &aCurrBranc
 
 			while(itBlockEnd != itEnd)
 			{
-				if((itBlockEnd->eType == IT_J) || (itBlockEnd->eType == IT_JR))
+				if((itBlockEnd->eType == IT_J) || ((itBlockEnd->eType == IT_JR) && (itBlockEnd->eRS == R_RA)))
 				{
 					tInstList::iterator itBlockEndNext = itBlockEnd;
 					itBlockEndNext++;
@@ -722,7 +734,7 @@ bool optimizeInstructions(Function &aFunction)
 #endif
 
 #if 1
-	if(detectReturningIfBranch(aFunction.m_collInstList))
+	if(detectEndingIfBranch(aFunction.m_collInstList))
 	{
 		return true;
 	}
