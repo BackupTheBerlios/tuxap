@@ -392,6 +392,39 @@ static bool removeClosingJump(tInstList &collInstList, unsigned uJumpTarget)
 	return false;
 }
 
+static bool removeClosingJump2(tInstList &collInstList, unsigned uNextAddress)
+{
+	M_ASSERT(uNextAddress != 0);
+	M_ASSERT(uNextAddress != 0xFFFFFFFF);
+
+	tInstList::iterator itCurr = collInstList.begin();
+	tInstList::iterator itEnd = collInstList.end();
+	tInstList::iterator itNext = collInstList.begin();
+	itNext++;
+
+	while((itCurr != itEnd) && (itNext != itEnd))
+	{
+		if((itCurr->collIfBranch.size() > 0) && (itCurr->collElseBranch.size() == 0)) 
+		{
+			tInstList::reverse_iterator itIfLast = itCurr->collIfBranch.rbegin();
+		
+			if((itIfLast->uJumpAddress == uNextAddress) && (!itIfLast->bIgnoreJump))
+			{
+				itCurr->collIfBranch.pop_back();
+				itCurr->collElseBranch.insert(itCurr->collElseBranch.begin(), itNext, itEnd);
+				collInstList.erase(itNext, itEnd);
+				
+				return true;
+			}
+		}
+
+		itCurr++;
+		itNext++;
+	}
+
+	return false;
+}
+
 /* Detect situations where a jumps at the end of a branch jumps to a   */
 /* target which is the next (outside) instruction after the branch     */
 /* Preconditions:                                                      */
@@ -408,12 +441,22 @@ static bool detectEndOfBranchJumps(tInstList &collInstList)
 	{
 		if(((itCurr->collIfBranch.size() > 0) || (itCurr->collElseBranch.size() > 0)) && (itNext->bIsJumpTarget))
 		{
-			if(removeClosingJump(itCurr->collIfBranch, itNext->uAddress))
+			if(removeClosingJump2(itCurr->collIfBranch, itNext->uAddress))
 			{
 				return true;
 			}
 
-			if(removeClosingJump(itCurr->collElseBranch, itNext->uAddress))
+			if(removeClosingJump2(itCurr->collElseBranch, itNext->uAddress))
+			{
+				return true;
+			}
+		
+			if(detectEndOfBranchJumps(itCurr->collIfBranch))
+			{
+				return true;
+			}
+
+			if(detectEndOfBranchJumps(itCurr->collElseBranch))
 			{
 				return true;
 			}
@@ -681,6 +724,16 @@ static bool detectAndCloneSmallBlocks(Function &aFunction, tInstList &aCurrBranc
 
 				itBlockEnd++;
 			}
+		}
+		
+		if(detectAndCloneSmallBlocks(aFunction, itCurr->collIfBranch))
+		{
+			return true;
+		}
+
+		if(detectAndCloneSmallBlocks(aFunction, itCurr->collElseBranch))
+		{
+			return true;
 		}
 
 		itCurr++;
